@@ -1,0 +1,39 @@
+//
+//  AppRelease.xcconfig
+//  BaseProject
+//
+
+// Define
+PROTOCOL_HTTP = http:/
+PROTOCOL_HTTPS = https:/
+
+// Server
+BaseURL                     = $(PROTOCOL_HTTPS)/api.example.com/
+SearchAdsTrackingBaseURL    = $(PROTOCOL_HTTPS)/appletracking.addonsmaster.com/
+
+// AppInfo
+AppName                     = HEROS
+ApplicationID               = id1498001784
+BundleVersion               = 1
+BundleVersionString         = 1.0
+AppsFlyerID                 = 123
+EmailDeveloper              = developer@example.com
+AppGroupID                  = group.com.test.app.new.app
+PrivacyPolicyUrl            = $(PROTOCOL_HTTPS)/example.com/privacy
+TermOfUseUrl                = $(PROTOCOL_HTTPS)/example.com/terms
+RefundUrl                   = $(PROTOCOL_HTTPS)/example.com/refund
+EnableShowUpdateAppDialog   = YES
+
+// InAppPurchase
+EnableShowInApp             = YES
+EnableShowInAppWhenOpenApp  = YES
+LimitedFeature              = YES
+IAPSubcriptionSecret        = d709f7978cbf4c33b74c899b53222a66
+IAPOneTime                  = com.test.new.nonconsumable1
+IAPWeekly                   = com.test.new.weekly
+IAPMonthly                  = com.test.new.monthly
+IAPYearly                   = com.test.new.yearly
+
+// LocalNotification
+EnableLocalNotification     = NO
+TimeTriggerNotification     = 81600
