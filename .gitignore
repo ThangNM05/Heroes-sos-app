@@ -1,0 +1,48 @@
+# Xcode
+.DS_Store
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xccheckout
+*.moved-aside
+*.pbxuser
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# CocoaPods
+Pods/
+
+# Carthage
+Carthage/Build/
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output/
+
+# Archives
+*.xcarchive
+*.ipa
+*.dSYM
+*.dSYM.zip
+
+# Secrets / Local config
+.env
+.env.*
+GoogleService-Info.plist
+
+# User-specific Xcode files
+*.xcuserdatad
+*.xcuserstate
+
+# macOS
+.DS_Store
+
+# Temporary files
+*.tmp
+*.log
