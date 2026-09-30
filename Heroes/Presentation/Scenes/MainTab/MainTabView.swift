@@ -1,71 +1,40 @@
-//
-//  MainTabView.swift
-//  BaseProject
-//
-//  Created by Thang Nguyen Minh on 8/31/2026.
-//  Copyright © 2026 Thang Nguyen Minh. All rights reserved.
-//
-
 import SwiftUI
 
 struct MainTabView: View {
-    @State private var selectedTab: Tab = .map
+    @EnvironmentObject private var session: AppSessionStore
 
-    enum Tab: Int, CaseIterable {
-        case map
-        case device
-        case handbook
-        case settings
-
-        var title: String {
-            switch self {
-            case .map: return "Bản Đồ"
-            case .device: return "Thiết Bị"
-            case .handbook: return "Cẩm Nang"
-            case .settings: return "Cài Đặt"
-            }
+    var body: some View {
+        Group {
+            if session.currentRole == .deviceOwner { ownerTabs } else { trustedContactTabs }
         }
+        .tint(Theme.Colors.primaryColor)
+    }
 
-        var iconName: String {
-            switch self {
-            case .map: return "map.fill"
-            case .device: return "shield.checkered"
-            case .handbook: return "heart.text.square.fill"
-            case .settings: return "gearshape.2.fill"
-            }
+    private var ownerTabs: some View {
+        TabView {
+            CommunityMapView()
+                .tabItem { Label("Bản đồ", systemImage: "map.fill") }
+            OwnerRecordingsView()
+                .tabItem { Label("Bản ghi", systemImage: "waveform") }
+            DeviceManagementView()
+                .tabItem { Label("Thiết bị", systemImage: "sensor.tag.radiowaves.forward.fill") }
+            SOSSettingsView()
+                .tabItem { Label("Cài đặt", systemImage: "gearshape.fill") }
         }
     }
 
-    var body: some View {
-        TabView(selection: $selectedTab) {
+    private var trustedContactTabs: some View {
+        TabView {
             CommunityMapView()
-                .tabItem {
-                    Label(Tab.map.title, systemImage: Tab.map.iconName)
-                }
-                .tag(Tab.map)
-
-            DeviceManagementView()
-                .tabItem {
-                    Label(Tab.device.title, systemImage: Tab.device.iconName)
-                }
-                .tag(Tab.device)
-
-            WomenHandbookView()
-                .tabItem {
-                    Label(Tab.handbook.title, systemImage: Tab.handbook.iconName)
-                }
-                .tag(Tab.handbook)
-
+                .tabItem { Label("Bản đồ", systemImage: "map.fill") }
+            EmergencyNetworkView(mode: .connections)
+                .tabItem { Label("Người thân", systemImage: "person.2.fill") }
             SOSSettingsView()
-                .tabItem {
-                    Label(Tab.settings.title, systemImage: Tab.settings.iconName)
-                }
-                .tag(Tab.settings)
+                .tabItem { Label("Cài đặt", systemImage: "gearshape.fill") }
         }
-        .tint(Theme.Colors.primaryColor)
     }
 }
 
 #Preview {
-    MainTabView()
+    MainTabView().environmentObject(AppSessionStore())
 }

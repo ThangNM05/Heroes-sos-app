@@ -11,7 +11,7 @@ import Foundation
 final class SOSRepository: ISOSRepository {
     private var currentSettings: SOSSettings = SOSSettings(
         userRole: .deviceOwner,
-        recipientMode: .all,
+        recipientMode: .trustedContactsOnly,
         autoRecordAudio: true,
         autoTriggerSiren: false,
         sirenVolumeDecibels: 110,
@@ -36,14 +36,14 @@ final class SOSRepository: ISOSRepository {
             addressName: "Số 124 Phố Huế, P. Ngô Thì Nhậm, Q. Hai Bà Trưng, Hà Nội",
             createdAt: Date().addingTimeInterval(-180), // 3 mins ago
             status: .responding,
-            recipientMode: .all,
+            recipientMode: .trustedContactsOnly,
             audioRecords: [
                 AudioRecord(
                     id: "REC-901A",
                     title: "Voice Memo #1 (Tiếng tranh cãi)",
                     durationSeconds: 15,
                     recordedAt: Date().addingTimeInterval(-180),
-                    fileURL: "https://mock.storage/audio/sos-901a.m4a",
+                    fileURL: "secure-stream://sos-901a",
                     isEvidence: true
                 ),
                 AudioRecord(
@@ -51,7 +51,7 @@ final class SOSRepository: ISOSRepository {
                     title: "Voice Memo #2 (Kẻ xấu bám theo)",
                     durationSeconds: 24,
                     recordedAt: Date().addingTimeInterval(-120),
-                    fileURL: "https://mock.storage/audio/sos-901b.m4a",
+                    fileURL: "secure-stream://sos-901b",
                     isEvidence: true
                 )
             ],
@@ -72,14 +72,14 @@ final class SOSRepository: ISOSRepository {
             addressName: "Ngõ 45 Trần Phú, P. Điện Biên, Q. Ba Đình, Hà Nội",
             createdAt: Date().addingTimeInterval(-50), // 50s ago
             status: .active,
-            recipientMode: .all,
+            recipientMode: .trustedContactsOnly,
             audioRecords: [
                 AudioRecord(
                     id: "REC-902",
                     title: "Voice Memo hiện trường (Cần người giúp ngay)",
                     durationSeconds: 18,
                     recordedAt: Date().addingTimeInterval(-50),
-                    fileURL: "https://mock.storage/audio/sos-902.m4a",
+                    fileURL: "secure-stream://sos-902",
                     isEvidence: true
                 )
             ],
@@ -107,7 +107,7 @@ final class SOSRepository: ISOSRepository {
                     title: "Voice Memo va chạm xe",
                     durationSeconds: 35,
                     recordedAt: Date().addingTimeInterval(-2400),
-                    fileURL: "https://mock.storage/audio/sos-903.m4a",
+                    fileURL: "secure-stream://sos-903",
                     isEvidence: true
                 )
             ],

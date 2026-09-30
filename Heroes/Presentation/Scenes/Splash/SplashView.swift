@@ -9,6 +9,7 @@
 import SwiftUI
 
 struct SplashView: View {
+    @EnvironmentObject private var session: AppSessionStore
     @StateObject private var viewModel: SplashViewModel
 
     init(viewModel: SplashViewModel? = nil) {
@@ -19,7 +20,11 @@ struct SplashView: View {
     var body: some View {
         Group {
             if viewModel.isCompleted {
-                MainTabView()
+                if session.isAuthenticated {
+                    MainTabView()
+                } else {
+                    AuthenticationView()
+                }
             } else {
                 ZStack {
                     Color(Theme.Colors.bgColor).ignoresSafeArea()
@@ -99,4 +104,5 @@ struct SplashView: View {
             )
         )
     )
+    .environmentObject(AppSessionStore())
 }

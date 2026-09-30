@@ -10,6 +10,7 @@ import SwiftUI
 
 @main
 struct BaseProjectApp: App {
+    @StateObject private var session = AppSessionStore()
 
     init() {
         print("🚀 [BaseProjectApp] Initializing HEROS App & Registering Dependencies...")
@@ -20,6 +21,7 @@ struct BaseProjectApp: App {
     var body: some Scene {
         WindowGroup {
             SplashView()
+                .environmentObject(session)
                 .preferredColorScheme(.light)
         }
     }

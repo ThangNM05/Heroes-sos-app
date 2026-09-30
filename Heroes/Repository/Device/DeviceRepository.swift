@@ -134,7 +134,7 @@ final class DeviceRepository: IDeviceRepository {
             title: "Voice Memo HEROS #\(Int.random(in: 10...99))",
             durationSeconds: duration,
             recordedAt: Date(),
-            fileURL: "https://mock.storage/audio/voice-memo-\(Int.random(in: 100...999)).m4a",
+            fileURL: "secure-stream://voice-memo-\(Int.random(in: 100...999))",
             isEvidence: true
         )
         self.recordStartTime = nil

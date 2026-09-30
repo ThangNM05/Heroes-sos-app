@@ -9,7 +9,7 @@
 import Foundation
 import CoreLocation
 
-// MARK: - User Role Classification (Không cần KYC)
+// MARK: - User Role Classification
 enum HEROSUserRole: String, Codable, CaseIterable, Identifiable {
     case deviceOwner = "Người sở hữu thiết bị HEROS"
     case trustedContact = "Người thân / Bạn bè được mời"
@@ -49,6 +49,10 @@ enum HEROSUserRole: String, Codable, CaseIterable, Identifiable {
             return "heart.circle.fill"
         }
     }
+}
+
+extension HEROSUserRole {
+    static var mvpRoles: [HEROSUserRole] { [.deviceOwner, .trustedContact] }
 }
 
 // MARK: - Recipient Target Mode
@@ -94,7 +98,7 @@ enum SOSRecipientMode: String, Codable, CaseIterable, Identifiable {
 }
 
 // MARK: - Hardware LED & Vibration States
-enum DeviceLEDState: String, Codable {
+enum DeviceLEDState: String, Codable, CaseIterable {
     case off = "Đèn Tắt (Chờ)"
     case sosActiveRed = "Đèn ĐỎ + Rung (Đang phát SOS)"
     case responderIncomingGreen = "Đèn XANH LÁ + Rung (Đã có người đến cứu)"
@@ -135,6 +139,8 @@ struct AudioRecord: Identifiable, Codable, Equatable {
     let recordedAt: Date
     let fileURL: String
     var isEvidence: Bool
+    var expiresAt: Date? = Calendar.current.date(byAdding: .day, value: 30, to: Date())
+    var isOwnerOnly: Bool = true
 
     var formattedDuration: String {
         let minutes = durationSeconds / 60
@@ -196,6 +202,13 @@ struct EmergencyContact: Identifiable, Codable, Equatable {
     var isTrusted: Bool
     var isNotifiedViaSMS: Bool
     var isNotifiedViaCall: Bool
+    var invitationStatus: InvitationStatus = .accepted
+
+    enum InvitationStatus: String, Codable, CaseIterable {
+        case pending = "Đã gửi lời mời"
+        case accepted = "Đã kết nối"
+        case expired = "Lời mời hết hạn"
+    }
 }
 
 // MARK: - BLE Hardware Device

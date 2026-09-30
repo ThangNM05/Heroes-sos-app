@@ -56,7 +56,7 @@ final class SOSSettingsViewModel: BaseViewModel, ISOSSettingsViewModel {
     }
 
     func addContact(name: String, relationship: String, phone: String) {
-        guard !name.isEmpty, !phone.isEmpty else { return }
+        guard !name.isEmpty, !phone.isEmpty, emergencyContacts.count < 10 else { return }
         let nextPriority = (emergencyContacts.map(\.priorityOrder).max() ?? 0) + 1
 
         let newContact = EmergencyContact(
@@ -68,7 +68,8 @@ final class SOSSettingsViewModel: BaseViewModel, ISOSSettingsViewModel {
             priorityOrder: nextPriority,
             isTrusted: true,
             isNotifiedViaSMS: true,
-            isNotifiedViaCall: true
+            isNotifiedViaCall: true,
+            invitationStatus: .pending
         )
 
         Task {

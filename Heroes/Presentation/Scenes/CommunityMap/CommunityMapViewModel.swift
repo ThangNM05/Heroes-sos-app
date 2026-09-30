@@ -49,6 +49,70 @@ final class CommunityMapViewModel: BaseViewModel, ICommunityMapViewModel {
         }
     }
 
+    func loadAlerts(for role: HEROSUserRole) {
+        isLoading = true
+        Task {
+            do {
+                if role == .deviceOwner {
+                    self.alerts = sosService.getActiveSOSAlert().map { [$0] } ?? []
+                } else {
+                    self.alerts = try await sosService.fetchCommunityAlerts().filter {
+                        $0.status != .resolved && $0.senderId != "current_user"
+                    }
+                }
+                if let first = self.alerts.first { self.region.center = first.coordinate }
+                self.isLoading = false
+            } catch {
+                self.isLoading = false
+                self.handleError(error)
+            }
+        }
+    }
+
+    func triggerMockSOS() {
+        isLoading = true
+        Task {
+            do {
+                let record = AudioRecord(
+                    id: "REC-\(Int.random(in: 100...999))",
+                    title: "Ghi âm trực tiếp",
+                    durationSeconds: 12,
+                    recordedAt: Date(),
+                    fileURL: "secure-stream://live",
+                    isEvidence: true
+                )
+                let alert = try await sosService.triggerEmergencySOS(
+                    latitude: 21.028511,
+                    longitude: 105.854444,
+                    address: "Phố Đinh Tiên Hoàng, P. Lý Thái Tổ, Q. Hoàn Kiếm, Hà Nội",
+                    initialAudio: record,
+                    isHardwareTriggered: false
+                )
+                self.alerts = [alert]
+                self.region.center = alert.coordinate
+                self.isLoading = false
+            } catch {
+                self.isLoading = false
+                self.handleError(error)
+            }
+        }
+    }
+
+    func resolveOwnSOS() {
+        guard let alert = alerts.first else { return }
+        Task {
+            do {
+                try await sosService.resolveActiveSOS(id: alert.id)
+                self.alerts = []
+                self.selectedAlert = nil
+                self.stopAudio()
+                self.showToast("Đã xác nhận an toàn. Quyền nghe bản ghi của người nhận đã được thu hồi.")
+            } catch {
+                self.handleError(error)
+            }
+        }
+    }
+
     func selectAlert(_ alert: SOSAlert) {
         self.selectedAlert = alert
         self.region.center = alert.coordinate
@@ -74,7 +138,7 @@ final class CommunityMapViewModel: BaseViewModel, ICommunityMapViewModel {
                     self.isRespondingSuccess = true
                     self.showToast("Cảm ơn bạn! Hệ thống đã ghi nhận bạn là nguồn hỗ trợ và thông báo tới thiết bị nạn nhân.")
                 } else {
-                    self.showToast("Đã từ chối. Hệ thống tiếp tục mở rộng bán kính tìm người hỗ trợ khác.")
+                    self.showToast("Đã chọn hỗ trợ từ xa. Hãy gọi điện hoặc giữ liên lạc với người thân.")
                     self.selectedAlert = nil
                 }
             } catch {
