@@ -1,141 +1,158 @@
-//
-//  SOSDashboardViewModel.swift
-//  BaseProject
-//
-//  Created by Thang Nguyen Minh on 8/31/2026.
-//  Copyright © 2026 Thang Nguyen Minh. All rights reserved.
-//
-
-import Foundation
 import Combine
 import CoreLocation
+import Foundation
 
 @MainActor
 final class SOSDashboardViewModel: BaseViewModel, ISOSDashboardViewModel {
-    // MARK: - Published Properties
-    @Published var isEmergencyActive: Bool = false
-    @Published var isCountingDown: Bool = false
-    @Published var countdownRemaining: Int = 3
-    @Published var isRecordingAudio: Bool = false
-    @Published var recordingDurationSeconds: Int = 0
-    @Published var isSirenPlaying: Bool = false
-    @Published var activeSOSAlert: SOSAlert? = nil
-    @Published var connectedDevice: BLEDevice? = nil
-    @Published var currentSettings: SOSSettings = SOSSettings()
-    @Published var simulatedAudioWaveform: [CGFloat] = [0.2, 0.4, 0.6, 0.8, 0.5, 0.3, 0.7, 0.9, 0.4, 0.6]
+    @Published var isEmergencyActive = false
+    @Published var isCountingDown = false
+    @Published var countdownRemaining = 3
+    @Published var isRecordingAudio = false
+    @Published var recordingDurationSeconds = 0
+    @Published var isSirenPlaying = false
+    @Published var activeSOSAlert: SOSAlert?
+    @Published var connectedDevice: BLEDevice?
+    @Published var currentSettings = SOSSettings()
+    @Published var audioWaveform: [CGFloat] = Array(repeating: 0.08, count: 10)
 
-    // MARK: - Dependencies
     private let sosService: ISOSService
     private let deviceService: IDeviceService
-
-    // MARK: - Timers
+    private let repository: ISOSAPIRepository
+    private let locationProvider: SOSLocationProvider
+    private let audioRecorder: SOSAudioRecorder
+    private weak var session: AppSessionStore?
+    private var latestLocation: CLLocation?
+    private var lastLocationUploadAt: Date?
     private var countdownTimer: AnyCancellable?
     private var recordingTimer: AnyCancellable?
     private var waveformTimer: AnyCancellable?
 
-    init(sosService: ISOSService, deviceService: IDeviceService) {
+    init(
+        sosService: ISOSService,
+        deviceService: IDeviceService,
+        repository: ISOSAPIRepository,
+        locationProvider: SOSLocationProvider? = nil,
+        audioRecorder: SOSAudioRecorder? = nil
+    ) {
         self.sosService = sosService
         self.deviceService = deviceService
+        self.repository = repository
+        self.locationProvider = locationProvider ?? SOSLocationProvider()
+        self.audioRecorder = audioRecorder ?? SOSAudioRecorder()
         super.init()
+        self.locationProvider.onLocation = { [weak self] location in self?.receive(location) }
     }
 
-    func loadDashboardData() {
-        self.currentSettings = sosService.getSettings()
-        self.connectedDevice = deviceService.getConnectedDevice()
-        self.activeSOSAlert = sosService.getActiveSOSAlert()
-        self.isEmergencyActive = (self.activeSOSAlert != nil)
+    func loadDashboardData(session: AppSessionStore) {
+        self.session = session
+        currentSettings = sosService.getSettings()
+        connectedDevice = deviceService.getConnectedDevice()
+        locationProvider.start()
+        isLoading = true
+        Task {
+            defer { isLoading = false }
+            do {
+                activeSOSAlert = try await session.performAuthenticatedRequest {
+                    try await self.repository.fetchOwnerActiveSOS(accessToken: $0)
+                }
+                isEmergencyActive = activeSOSAlert != nil
+            } catch {
+                handleError(error)
+            }
+        }
+    }
+
+    func stop() {
+        locationProvider.stop()
     }
 
     func onSOSButtonPressed() {
-        guard !isEmergencyActive else { return }
-
+        guard !isEmergencyActive, !isLoading else { return }
         countdownRemaining = currentSettings.countdownDurationSeconds
         isCountingDown = true
-
         countdownTimer?.cancel()
-        countdownTimer = Timer.publish(every: 1.0, on: .main, in: .common)
+        countdownTimer = Timer.publish(every: 1, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
-                guard let self = self else { return }
-                if self.countdownRemaining > 1 {
-                    self.countdownRemaining -= 1
+                guard let self else { return }
+                if countdownRemaining > 1 {
+                    countdownRemaining -= 1
                 } else {
-                    self.countdownTimer?.cancel()
-                    self.isCountingDown = false
-                    self.triggerImmediateSOS()
+                    cancelCountdownTimerOnly()
+                    triggerImmediateSOS()
                 }
             }
     }
 
     func cancelCountdown() {
-        countdownTimer?.cancel()
-        isCountingDown = false
+        cancelCountdownTimerOnly()
         countdownRemaining = currentSettings.countdownDurationSeconds
     }
 
     func triggerImmediateSOS() {
-        countdownTimer?.cancel()
-        isCountingDown = false
+        cancelCountdownTimerOnly()
+        guard let session else {
+            errorMessage = AuthValidationError.noActiveSession.localizedDescription
+            return
+        }
+        guard let location = latestLocation ?? locationProvider.latestLocation else {
+            errorMessage = "Chưa lấy được vị trí hiện tại. Hãy bật quyền Vị trí và thử lại."
+            return
+        }
+
         isLoading = true
-
         Task {
+            defer { isLoading = false }
             do {
-                // 1. Start Auto Audio Recording if enabled
-                if currentSettings.autoRecordAudio {
-                    self.startRecording()
+                let update = SOSLocationUpdate(
+                    latitude: location.coordinate.latitude,
+                    longitude: location.coordinate.longitude,
+                    accuracy: location.horizontalAccuracy,
+                    recordedAt: location.timestamp,
+                    address: nil
+                )
+                let alert = try await session.performAuthenticatedRequest {
+                    try await self.repository.createSOS(
+                        location: update,
+                        message: "Tôi đang gặp sự cố, cần hỗ trợ!",
+                        clientRequestId: UUID().uuidString.lowercased(),
+                        accessToken: $0
+                    )
                 }
-
-                // 2. Start Siren on Hardware device if enabled
+                activeSOSAlert = alert
+                isEmergencyActive = true
+                if currentSettings.autoRecordAudio { await beginRecording() }
                 if currentSettings.autoTriggerSiren {
                     _ = try await deviceService.toggleSiren(isActive: true)
-                    self.isSirenPlaying = true
+                    isSirenPlaying = true
                 }
-
-                // 3. Create Audio Record Mock payload
-                let audioPayload = AudioRecord(
-                    id: "REC-\(Int.random(in: 100...999))",
-                    title: "Ghi âm hiện trường khẩn cấp",
-                    durationSeconds: 15,
-                    recordedAt: Date(),
-                    fileURL: "https://mock.storage/audio/emergency-live.m4a",
-                    isEvidence: true
-                )
-
-                // 4. Send SOS to Server with GPS & Audio
-                let alert = try await sosService.triggerEmergencySOS(
-                    latitude: 21.028511,
-                    longitude: 105.854444,
-                    address: "Đang ở khu vực Hoàn Kiếm, Hà Nội (Định vị thời gian thực)",
-                    initialAudio: audioPayload,
-                    isHardwareTriggered: (connectedDevice?.isConnected == true)
-                )
-
-                self.activeSOSAlert = alert
-                self.isEmergencyActive = true
-                self.isLoading = false
+            } catch let error as APIError where error.serverCode == "SOS_ALREADY_ACTIVE" {
+                activeSOSAlert = try? await session.performAuthenticatedRequest {
+                    try await self.repository.fetchOwnerActiveSOS(accessToken: $0)
+                }
+                isEmergencyActive = activeSOSAlert != nil
             } catch {
-                self.isLoading = false
-                self.handleError(error)
+                handleError(error)
             }
         }
     }
 
     func resolveEmergency() {
-        guard let alert = activeSOSAlert else { return }
+        guard let session, let alert = activeSOSAlert else { return }
         isLoading = true
-
         Task {
+            defer { isLoading = false }
             do {
-                try await sosService.resolveActiveSOS(id: alert.id)
-                self.stopRecording()
-                _ = try await deviceService.toggleSiren(isActive: false)
-                self.isSirenPlaying = false
-                self.isEmergencyActive = false
-                self.activeSOSAlert = nil
-                self.isLoading = false
+                if isRecordingAudio { try await finishRecordingAndUpload() }
+                try await session.performAuthenticatedRequest {
+                    try await self.repository.resolve(sosId: alert.id, accessToken: $0)
+                }
+                _ = try? await deviceService.toggleSiren(isActive: false)
+                isSirenPlaying = false
+                isEmergencyActive = false
+                activeSOSAlert = nil
             } catch {
-                self.isLoading = false
-                self.handleError(error)
+                handleError(error)
             }
         }
     }
@@ -149,36 +166,107 @@ final class SOSDashboardViewModel: BaseViewModel, ISOSDashboardViewModel {
     }
 
     func toggleAudioRecording() {
-        if isRecordingAudio {
-            stopRecording()
-        } else {
-            startRecording()
+        guard isEmergencyActive else {
+            errorMessage = "Bạn chỉ có thể gửi bản ghi khi một phiên SOS đang hoạt động."
+            return
+        }
+        Task {
+            do {
+                if isRecordingAudio { try await finishRecordingAndUpload() }
+                else { await beginRecording() }
+            } catch {
+                handleError(error)
+            }
         }
     }
 
-    private func startRecording() {
-        isRecordingAudio = true
-        recordingDurationSeconds = 0
+    private func beginRecording() async {
+        do {
+            try await audioRecorder.start()
+            isRecordingAudio = true
+            recordingDurationSeconds = 0
+            startRecordingTimers()
+        } catch {
+            handleError(error)
+        }
+    }
 
+    private func finishRecordingAndUpload() async throws {
+        guard let session, let sosId = activeSOSAlert?.id else { throw AuthValidationError.noActiveSession }
+        stopRecordingTimers()
+        isRecordingAudio = false
+        let clip = try audioRecorder.stop()
+        let uploaded = try await session.performAuthenticatedRequest {
+            try await self.repository.uploadRecording(
+                sosId: sosId,
+                data: clip.data,
+                durationSeconds: clip.durationSeconds,
+                fileName: clip.fileName,
+                mimeType: clip.mimeType,
+                accessToken: $0
+            )
+        }
+        activeSOSAlert?.audioRecords.append(uploaded)
+    }
+
+    private func startRecordingTimers() {
         recordingTimer?.cancel()
-        recordingTimer = Timer.publish(every: 1.0, on: .main, in: .common)
+        recordingTimer = Timer.publish(every: 1, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
-                self?.recordingDurationSeconds += 1
+                guard let self else { return }
+                recordingDurationSeconds += 1
+                if recordingDurationSeconds >= 120 {
+                    Task {
+                        do { try await self.finishRecordingAndUpload() }
+                        catch { self.handleError(error) }
+                    }
+                }
             }
-
         waveformTimer?.cancel()
         waveformTimer = Timer.publish(every: 0.15, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
-                guard let self = self else { return }
-                self.simulatedAudioWaveform = (0..<10).map { _ in CGFloat.random(in: 0.15...1.0) }
+                guard let self else { return }
+                let level = audioRecorder.normalizedPowerLevel()
+                audioWaveform.removeFirst()
+                audioWaveform.append(level)
             }
     }
 
-    private func stopRecording() {
-        isRecordingAudio = false
+    private func stopRecordingTimers() {
         recordingTimer?.cancel()
         waveformTimer?.cancel()
+        recordingTimer = nil
+        waveformTimer = nil
+    }
+
+    private func cancelCountdownTimerOnly() {
+        countdownTimer?.cancel()
+        countdownTimer = nil
+        isCountingDown = false
+    }
+
+    private func receive(_ location: CLLocation) {
+        latestLocation = location
+        guard let session, let sosId = activeSOSAlert?.id,
+              Date().timeIntervalSince(lastLocationUploadAt ?? .distantPast) >= 10 else { return }
+        lastLocationUploadAt = Date()
+        let update = SOSLocationUpdate(
+            latitude: location.coordinate.latitude,
+            longitude: location.coordinate.longitude,
+            accuracy: location.horizontalAccuracy,
+            recordedAt: location.timestamp,
+            address: nil
+        )
+        Task {
+            do {
+                activeSOSAlert = try await session.performAuthenticatedRequest {
+                    try await self.repository.updateLocation(sosId: sosId, location: update, accessToken: $0)
+                }
+            } catch {
+                handleError(error)
+            }
+        }
     }
 }

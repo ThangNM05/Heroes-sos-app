@@ -79,6 +79,59 @@ final class AuthRepository: IAuthRepository {
         )
     }
 
+    func deleteAvatar(accessToken: String) async throws {
+        let _: DiscardedAuthResponse = try await networkClient.requestEnvelope(
+            path: "/me/avatar",
+            method: .delete,
+            headers: APIHeaders.json(accessToken: accessToken)
+        )
+    }
+
+    func fetchProfile(accessToken: String) async throws -> HEROSAccount {
+        let response: AuthUserDTO = try await networkClient.requestEnvelope(
+            path: "/me",
+            headers: APIHeaders.json(accessToken: accessToken)
+        )
+        return try response.toDomain()
+    }
+
+    func updateProfile(_ update: ProfileUpdate, accessToken: String) async throws -> HEROSAccount {
+        let body = UpdateProfileBody(
+            fullName: update.fullName,
+            dateOfBirth: Self.birthDateFormatter.string(from: update.dateOfBirth),
+            gender: update.gender?.rawValue
+        )
+        let response: AuthUserDTO = try await networkClient.requestEnvelope(
+            path: "/me",
+            method: .patch,
+            headers: APIHeaders.json(accessToken: accessToken),
+            jsonBody: body
+        )
+        return try response.toDomain()
+    }
+
+    func requestPhoneOTP(phone: String, accessToken: String) async throws -> PhoneOTPChallenge {
+        try await networkClient.requestEnvelope(
+            path: "/me/phone/request-otp",
+            method: .post,
+            headers: APIHeaders.json(accessToken: accessToken),
+            jsonBody: RequestPhoneOTPBody(phone: phone)
+        )
+    }
+
+    func verifyPhoneOTP(
+        challengeId: String,
+        otp: String,
+        accessToken: String
+    ) async throws -> PhoneUpdateResult {
+        try await networkClient.requestEnvelope(
+            path: "/me/phone/verify-otp",
+            method: .post,
+            headers: APIHeaders.json(accessToken: accessToken),
+            jsonBody: VerifyPhoneOTPBody(challengeId: challengeId, otp: otp)
+        )
+    }
+
     func requestAccountDeletionOTP(accessToken: String) async throws -> AccountDeletionChallenge {
         try await networkClient.requestEnvelope(
             path: "/me/deletion/request-otp",
@@ -144,6 +197,23 @@ private struct DeleteAccountBody: Encodable {
     let confirmation: String
 }
 
+private struct UpdateProfileBody: Encodable {
+    let fullName: String
+    let dateOfBirth: String
+    let gender: String?
+}
+
+private struct RequestPhoneOTPBody: Encodable { let phone: String }
+
+private struct VerifyPhoneOTPBody: Encodable {
+    let challengeId: String
+    let otp: String
+}
+
+private struct DiscardedAuthResponse: Decodable {
+    init(from decoder: Decoder) throws {}
+}
+
 private struct RefreshSessionBody: Encodable {
     let refreshToken: String
     let deviceId: String
@@ -173,6 +243,7 @@ private struct AuthUserDTO: Decodable {
     let dateOfBirth: String
     let userType: String
     let avatarUrl: String?
+    let gender: HEROSGender?
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -185,6 +256,7 @@ private struct AuthUserDTO: Decodable {
         case userType
         case role
         case avatarUrl
+        case gender
     }
 
     init(from decoder: Decoder) throws {
@@ -199,6 +271,7 @@ private struct AuthUserDTO: Decodable {
         userType = try container.decodeIfPresent(String.self, forKey: .userType)
             ?? container.decode(String.self, forKey: .role)
         avatarUrl = try container.decodeIfPresent(String.self, forKey: .avatarUrl)
+        gender = try container.decodeIfPresent(HEROSGender.self, forKey: .gender)
     }
 
     func toDomain() throws -> HEROSAccount {
@@ -218,7 +291,8 @@ private struct AuthUserDTO: Decodable {
             isPhoneVerified: false,
             isEmailVerified: true,
             boundDeviceSerial: nil,
-            avatarURL: avatarUrl
+            avatarURL: avatarUrl,
+            gender: gender
         )
     }
 

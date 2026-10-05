@@ -46,7 +46,8 @@ struct APIError: Error, LocalizedError {
             statusCode: response.statusCode,
             serverCode: serverError?.data?.errorCode,
             serverMessage: serverError?.data?.message,
-            retryAfter: retryAfter(from: response.response),
+            retryAfter: retryAfter(from: response.response) ?? serverError?.data?.retryAfterSeconds
+                ?? retryAfter(from: serverError?.data?.details),
             requestURL: requestURL(from: response, target: target),
             responseData: response.data,
             underlyingError: nil
@@ -125,5 +126,11 @@ struct APIError: Error, LocalizedError {
             return seconds
         }
         return nil
+    }
+
+    private static func retryAfter(from details: JSONValue?) -> TimeInterval? {
+        guard case .object(let fields) = details,
+              case .number(let seconds) = fields["retryAfterSeconds"] else { return nil }
+        return seconds
     }
 }

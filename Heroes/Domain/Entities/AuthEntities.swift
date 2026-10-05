@@ -11,6 +11,7 @@ struct HEROSAccount: Identifiable, Codable, Equatable {
     var isEmailVerified: Bool
     var boundDeviceSerial: String?
     var avatarURL: String? = nil
+    var gender: HEROSGender? = nil
 
     var initials: String {
         fullName
@@ -20,6 +21,23 @@ struct HEROSAccount: Identifiable, Codable, Equatable {
             .map(String.init)
             .joined()
             .uppercased()
+    }
+}
+
+enum HEROSGender: String, Codable, CaseIterable, Identifiable {
+    case female
+    case male
+    case other
+    case undisclosed
+
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .female: return "Nữ"
+        case .male: return "Nam"
+        case .other: return "Khác"
+        case .undisclosed: return "Không muốn tiết lộ"
+        }
     }
 }
 
@@ -64,6 +82,26 @@ struct AuthTokenSet: Decodable, Equatable {
 
 struct AvatarUploadResult: Decodable, Equatable {
     let avatarUrl: String
+}
+
+struct ProfileUpdate: Equatable {
+    let fullName: String
+    let dateOfBirth: Date
+    let gender: HEROSGender?
+}
+
+struct PhoneOTPChallenge: Decodable, Equatable {
+    let challengeId: String
+    let deliveryChannel: String
+    let expiresAt: Date
+    let resendAfterSeconds: Int
+}
+
+struct PhoneUpdateResult: Decodable, Equatable {
+    let phone: String
+    let phoneOwnershipVerified: Bool
+    let authorizationMethod: String
+    let authorizedAt: Date
 }
 
 struct AccountDeletionChallenge: Decodable, Equatable {

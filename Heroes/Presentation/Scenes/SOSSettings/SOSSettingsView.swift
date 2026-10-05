@@ -5,11 +5,6 @@ struct SOSSettingsView: View {
     @StateObject private var viewModel: SOSSettingsViewModel
     @State private var showDeleteConfirmation = false
     @State private var showAccountDeletion = false
-    @State private var showAvatarSourceOptions = false
-    @State private var avatarPickerSource: AvatarPickerSource?
-    @State private var showAvatarPermissionAlert = false
-    @State private var avatarPermissionMessage = ""
-    @State private var avatarSelectionError: String?
 
     init(viewModel: SOSSettingsViewModel? = nil) {
         _viewModel = StateObject(wrappedValue: viewModel ?? SOSSettingsViewModel(sosService: AppDIContainer.shared.resolve()))
@@ -61,22 +56,6 @@ struct SOSSettingsView: View {
             .navigationTitle("Cài đặt")
             .navigationBarTitleDisplayMode(.inline)
             .onAppear { viewModel.loadSettingsAndContacts(session: session, mode: .manage) }
-            .confirmationDialog("Đổi ảnh đại diện", isPresented: $showAvatarSourceOptions) {
-                if AvatarImagePicker.isAvailable(.camera) {
-                    Button("Chụp ảnh") { prepareAvatarPicker(.camera) }
-                }
-                Button("Chọn từ thư viện") { prepareAvatarPicker(.photoLibrary) }
-                Button("Hủy", role: .cancel) {}
-            }
-            .alert("Cần cấp quyền truy cập", isPresented: $showAvatarPermissionAlert) {
-                Button("Mở Cài đặt") {
-                    guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
-                    UIApplication.shared.open(url)
-                }
-                Button("Để sau", role: .cancel) {}
-            } message: {
-                Text(avatarPermissionMessage)
-            }
             .alert("Xóa tài khoản HEROS?", isPresented: $showDeleteConfirmation) {
                 Button("Hủy", role: .cancel) {}
                 Button("Gửi mã xác nhận", role: .destructive) {
@@ -90,92 +69,32 @@ struct SOSSettingsView: View {
                 AccountDeletionView()
                     .environmentObject(session)
             }
-            .sheet(item: $avatarPickerSource) { source in
-                AvatarImagePicker(source: source) { result in
-                    avatarPickerSource = nil
-                    guard let result else { return }
-                    switch result {
-                    case .success(let data):
-                        avatarSelectionError = nil
-                        session.updateAvatar(imageData: data)
-                    case .failure(let error):
-                        avatarSelectionError = error.localizedDescription
-                    }
-                }
-                .ignoresSafeArea()
-            }
         }
     }
 
     private var profileSection: some View {
         Section {
-            HStack(spacing: 14) {
-                Button {
-                    showAvatarSourceOptions = true
-                } label: {
-                    ZStack(alignment: .bottomTrailing) {
-                        UserAvatarView(
-                            urlString: session.currentUser?.avatarURL,
-                            initials: session.currentUser?.initials ?? "HR",
-                            size: 56
-                        )
-
-                        Image(systemName: "camera.fill")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundColor(.white)
-                            .frame(width: 22, height: 22)
-                            .background(Theme.Colors.primaryColor)
-                            .clipShape(Circle())
-                            .overlay(Circle().stroke(Color.white, lineWidth: 2))
-
-                        if session.isUpdatingAvatar {
-                            Circle().fill(Color.black.opacity(0.4)).frame(width: 56, height: 56)
-                            ProgressView().tint(.white)
-                                .frame(width: 56, height: 56)
-                        }
+            NavigationLink { SOSChatListView() } label: {
+                Label("Nhóm hỗ trợ SOS", systemImage: "bubble.left.and.bubble.right")
+            }
+            NavigationLink {
+                UserProfileView()
+            } label: {
+                HStack(spacing: 14) {
+                    UserAvatarView(
+                        urlString: session.currentUser?.avatarURL,
+                        initials: session.currentUser?.initials ?? "HR",
+                        size: 56
+                    )
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(session.currentUser?.fullName ?? "HEROS User").font(Theme.Fonts.bold.swiftUI(size: 16))
+                        Text(session.currentUser?.email ?? "").font(Theme.Fonts.regular.swiftUI(size: 12)).foregroundColor(Theme.Colors.textSecondaryColor)
+                        Text(session.currentRole == .deviceOwner ? "Chủ thiết bị HEROS" : "Người thân được mời")
+                            .font(Theme.Fonts.semiBold.swiftUI(size: 10)).foregroundColor(Theme.Colors.primaryColor)
                     }
                 }
-                .disabled(session.isUpdatingAvatar)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(session.currentUser?.fullName ?? "HEROS User").font(Theme.Fonts.bold.swiftUI(size: 16))
-                    Text(session.currentUser?.email ?? "").font(Theme.Fonts.regular.swiftUI(size: 12)).foregroundColor(Theme.Colors.textSecondaryColor)
-                    Text(session.currentRole == .deviceOwner ? "Chủ thiết bị HEROS" : "Người thân được mời")
-                        .font(Theme.Fonts.semiBold.swiftUI(size: 10)).foregroundColor(Theme.Colors.primaryColor)
-                }
+                .padding(.vertical, 6)
             }
-            .padding(.vertical, 6)
-
-            if let avatarError = avatarSelectionError ?? session.errorMessage {
-                Text(avatarError)
-                    .font(Theme.Fonts.medium.swiftUI(size: 11))
-                    .foregroundColor(Theme.Colors.redColor)
-            } else if session.isUpdatingAvatar {
-                Text("Đang cập nhật ảnh đại diện...")
-                    .font(Theme.Fonts.regular.swiftUI(size: 11))
-                    .foregroundColor(Theme.Colors.textSecondaryColor)
-            }
-        }
-    }
-
-    private func prepareAvatarPicker(_ source: AvatarPickerSource) {
-        Task {
-            avatarSelectionError = nil
-            guard AvatarImagePicker.isAvailable(source) else {
-                avatarSelectionError = "Thiết bị này không hỗ trợ nguồn ảnh đã chọn."
-                return
-            }
-
-            let isAuthorized = await AvatarMediaPermission.request(for: source)
-            guard isAuthorized else {
-                avatarPermissionMessage = source == .camera
-                    ? "Hãy cho phép HEROS sử dụng Camera trong Cài đặt để chụp ảnh đại diện."
-                    : "Hãy cho phép HEROS truy cập Ảnh trong Cài đặt để chọn ảnh đại diện."
-                showAvatarPermissionAlert = true
-                return
-            }
-
-            avatarPickerSource = source
         }
     }
 

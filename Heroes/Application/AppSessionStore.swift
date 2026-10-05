@@ -13,11 +13,15 @@ final class AppSessionStore: ObservableObject {
     @Published private(set) var pendingPurpose: EmailOTPPurpose?
     @Published private(set) var otpChallenge: EmailOTPChallenge?
     @Published private(set) var accountDeletionChallenge: AccountDeletionChallenge?
+    @Published private(set) var phoneOTPChallenge: PhoneOTPChallenge?
     @Published private(set) var isUpdatingAvatar = false
     @Published private(set) var pendingInviteCode: String?
     @Published private(set) var isAcceptingInvite = false
     @Published var inviteResultMessage: String?
     @Published var errorMessage: String?
+    @Published var pendingSOSChatId: String?
+
+    func openSOSChat(_ id: String) { pendingSOSChatId = id }
 
     private let authService: IAuthService
     private let sessionStore: AuthSessionStoring
@@ -256,6 +260,85 @@ final class AppSessionStore: ObservableObject {
         }
     }
 
+    func deleteAvatar() {
+        guard session != nil else { return }
+        perform {
+            try await self.performAuthenticatedRequest {
+                try await self.authService.deleteAvatar(accessToken: $0)
+            }
+            guard var user = self.currentUser else { return }
+            user.avatarURL = nil
+            try self.replaceCurrentUser(user)
+        }
+    }
+
+    func refreshProfile() {
+        guard session != nil else { return }
+        perform {
+            let user = try await self.performAuthenticatedRequest {
+                try await self.authService.fetchProfile(accessToken: $0)
+            }
+            try self.replaceCurrentUser(user)
+        }
+    }
+
+    func updateProfile(fullName: String, dateOfBirth: Date, gender: HEROSGender?) {
+        let normalizedName = fullName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedName.isEmpty else {
+            errorMessage = AuthValidationError.missingInformation.localizedDescription
+            return
+        }
+        perform {
+            let user = try await self.performAuthenticatedRequest {
+                try await self.authService.updateProfile(
+                    ProfileUpdate(fullName: normalizedName, dateOfBirth: dateOfBirth, gender: gender),
+                    accessToken: $0
+                )
+            }
+            try self.replaceCurrentUser(user)
+        }
+    }
+
+    func requestPhoneUpdateOTP(phone: String) {
+        let normalizedPhone = phone.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard normalizedPhone.range(of: #"^\+[1-9][0-9]{7,14}$"#, options: .regularExpression) != nil else {
+            errorMessage = "Số điện thoại cần ở định dạng quốc tế, ví dụ +84901234567."
+            return
+        }
+        perform {
+            self.phoneOTPChallenge = try await self.performAuthenticatedRequest {
+                try await self.authService.requestPhoneOTP(phone: normalizedPhone, accessToken: $0)
+            }
+        }
+    }
+
+    func verifyPhoneUpdateOTP(_ otpValue: String) {
+        let otp = otpValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard otp.count == 6, otp.allSatisfy(\.isNumber) else {
+            errorMessage = AuthValidationError.invalidOTP.localizedDescription
+            return
+        }
+        guard let challengeId = phoneOTPChallenge?.challengeId else {
+            errorMessage = AuthValidationError.noPendingAuthentication.localizedDescription
+            return
+        }
+        perform {
+            let result = try await self.performAuthenticatedRequest {
+                try await self.authService.verifyPhoneOTP(challengeId: challengeId, otp: otp, accessToken: $0)
+            }
+            guard var user = self.currentUser else { return }
+            user.phoneNumber = result.phone
+            user.isPhoneVerified = false
+            try self.replaceCurrentUser(user)
+            self.phoneOTPChallenge = nil
+        }
+    }
+
+    func cancelPhoneUpdate() {
+        phoneOTPChallenge = nil
+        errorMessage = nil
+    }
+
     func handleInvitationURL(_ url: URL) {
         guard let code = ContactInviteURLParser.code(from: url) else { return }
         setPendingInviteCode(code)
@@ -305,6 +388,7 @@ final class AppSessionStore: ObservableObject {
     }
 
     func signOut() {
+        pendingSOSChatId = nil
         if let activeSession = session {
             let deviceId = installationIDProvider.deviceId
             Task {
@@ -319,6 +403,7 @@ final class AppSessionStore: ObservableObject {
         session = nil
         currentUser = nil
         pendingInviteCode = nil
+        phoneOTPChallenge = nil
         clearPendingAuthentication()
         authStep = .signIn
         errorMessage = nil
@@ -377,10 +462,25 @@ final class AppSessionStore: ObservableObject {
         otpChallenge = nil
     }
 
+    private func replaceCurrentUser(_ user: HEROSAccount) throws {
+        guard let activeSession = session else { throw AuthValidationError.noActiveSession }
+        let updatedSession = AuthSession(
+            accessToken: activeSession.accessToken,
+            refreshToken: activeSession.refreshToken,
+            refreshExpiresAt: activeSession.refreshExpiresAt,
+            user: user
+        )
+        try sessionStore.save(updatedSession)
+        session = updatedSession
+        currentUser = user
+    }
+
     private func clearSensitiveLocalData() {
+        pendingSOSChatId = nil
         URLCache.shared.removeAllCachedResponses()
         try? pendingInviteStore.clear()
         pendingInviteCode = nil
+        phoneOTPChallenge = nil
         SecureAudioCache.clear()
         NotificationCenter.default.post(name: .appSessionDidInvalidate, object: nil)
 
@@ -429,10 +529,12 @@ final class AppSessionStore: ObservableObject {
     }
 
     private func invalidateExpiredSession() {
+        pendingSOSChatId = nil
         try? sessionStore.clear()
         session = nil
         currentUser = nil
         accountDeletionChallenge = nil
+        phoneOTPChallenge = nil
         clearPendingAuthentication()
         authStep = .signIn
         SecureAudioCache.clear()

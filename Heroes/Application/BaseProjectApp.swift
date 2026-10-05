@@ -33,6 +33,7 @@ struct BaseProjectApp: App {
         WindowGroup {
             SplashView()
                 .environmentObject(session)
+                .modifier(SOSRealtimeLifecycleModifier())
                 .preferredColorScheme(.light)
                 .onOpenURL { session.handleInvitationURL($0) }
                 .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
@@ -63,6 +64,12 @@ struct BaseProjectApp: App {
         }
 
         // 2. Repository Layer
+        container.register(ISOSChatRepository.self, isSingleton: true) {
+            SOSChatRepository(networkClient: container.resolve())
+        }
+        container.register(ISOSChatService.self, isSingleton: true) {
+            SOSChatService(repository: container.resolve(), sosRepository: container.resolve())
+        }
         container.register(IAuthRepository.self, isSingleton: true) {
             AuthRepository(networkClient: container.resolve())
         }
@@ -146,7 +153,11 @@ struct BaseProjectApp: App {
         }
 
         container.register(SOSDashboardViewModel.self) {
-            SOSDashboardViewModel(sosService: container.resolve(), deviceService: container.resolve())
+            SOSDashboardViewModel(
+                sosService: container.resolve(),
+                deviceService: container.resolve(),
+                repository: container.resolve()
+            )
         }
 
         container.register(CommunityMapViewModel.self) {

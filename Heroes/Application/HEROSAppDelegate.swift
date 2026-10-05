@@ -51,7 +51,7 @@ final class HEROSAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificatio
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        postSOSPush(response.notification.request.content.userInfo)
+        postSOSPush(response.notification.request.content.userInfo, opened: true)
         completionHandler()
     }
 
@@ -64,12 +64,17 @@ final class HEROSAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificatio
         completionHandler(.newData)
     }
 
-    private func postSOSPush(_ payload: [AnyHashable: Any]) {
+    private func postSOSPush(_ payload: [AnyHashable: Any], opened: Bool = false) {
         guard let type = payload["type"] as? String, type.hasPrefix("SOS_") else { return }
+        if opened, type == "SOS_CHAT_MESSAGE", let chatId = payload["chatId"] as? String {
+            Task { @MainActor in SOSChatPushRouter.shared.pendingChatId = chatId }
+        }
         NotificationCenter.default.post(
             name: .sosPushReceived,
             object: nil,
-            userInfo: ["type": type, "sosId": payload["sosId"] as? String ?? ""]
+            userInfo: ["type": type, "sosId": payload["sosId"] as? String ?? "",
+                       "chatId": payload["chatId"] as? String ?? "",
+                       "messageId": payload["messageId"] as? String ?? "", "opened": opened]
         )
     }
 }

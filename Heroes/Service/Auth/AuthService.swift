@@ -27,6 +27,26 @@ final class AuthService: IAuthService {
         try await repository.uploadAvatar(data: data, accessToken: accessToken)
     }
 
+    func deleteAvatar(accessToken: String) async throws {
+        try await repository.deleteAvatar(accessToken: accessToken)
+    }
+
+    func fetchProfile(accessToken: String) async throws -> HEROSAccount {
+        try await repository.fetchProfile(accessToken: accessToken)
+    }
+
+    func updateProfile(_ update: ProfileUpdate, accessToken: String) async throws -> HEROSAccount {
+        try await repository.updateProfile(update, accessToken: accessToken)
+    }
+
+    func requestPhoneOTP(phone: String, accessToken: String) async throws -> PhoneOTPChallenge {
+        try await repository.requestPhoneOTP(phone: phone, accessToken: accessToken)
+    }
+
+    func verifyPhoneOTP(challengeId: String, otp: String, accessToken: String) async throws -> PhoneUpdateResult {
+        try await repository.verifyPhoneOTP(challengeId: challengeId, otp: otp, accessToken: accessToken)
+    }
+
     func requestAccountDeletionOTP(accessToken: String) async throws -> AccountDeletionChallenge {
         try await repository.requestAccountDeletionOTP(accessToken: accessToken)
     }

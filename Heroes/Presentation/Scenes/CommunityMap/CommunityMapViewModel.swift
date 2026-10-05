@@ -18,7 +18,7 @@ final class CommunityMapViewModel: BaseViewModel, ICommunityMapViewModel {
     private let repository: ISOSAPIRepository
     private let realtimeClient: ISOSRealtimeClient
     private let audioPlayer: ProtectedAudioPlayer
-    private let locationProvider = CurrentSOSLocationProvider()
+    private let locationProvider = SOSLocationProvider()
     private var role: HEROSUserRole = .trustedContact
     private var currentUser: HEROSAccount?
     private weak var session: AppSessionStore?
@@ -142,6 +142,7 @@ final class CommunityMapViewModel: BaseViewModel, ICommunityMapViewModel {
                     try await self.repository.fetchSOS(id: alert.id, accessToken: $0)
                 }
                 replace(updated)
+                if let chatId = updated.chatId { session.openSOSChat(chatId) }
             } catch {
                 handleError(error)
             }
@@ -192,7 +193,6 @@ final class CommunityMapViewModel: BaseViewModel, ICommunityMapViewModel {
     }
 
     func disconnectRealtime() {
-        realtimeClient.disconnect()
         locationProvider.stop()
         audioPlayer.stop()
     }
@@ -220,10 +220,7 @@ final class CommunityMapViewModel: BaseViewModel, ICommunityMapViewModel {
     }
 
     private func bindRealtime() {
-        realtimeClient.onConnected = { [weak self] in
-            Task { @MainActor in self?.reloadFromServer() }
-        }
-        realtimeClient.onEvent = { [weak self] event in
+        realtimeClient.events.sink { [weak self] event in
             Task { @MainActor in
                 guard let self else { return }
                 switch event {
@@ -234,7 +231,7 @@ final class CommunityMapViewModel: BaseViewModel, ICommunityMapViewModel {
                 }
                 self.reloadFromServer()
             }
-        }
+        }.store(in: &cancellables)
     }
 
     private func apply(_ freshAlerts: [SOSAlert]) {
@@ -275,44 +272,5 @@ final class CommunityMapViewModel: BaseViewModel, ICommunityMapViewModel {
             ),
             session: session
         )
-    }
-}
-
-@MainActor
-private final class CurrentSOSLocationProvider: NSObject, CLLocationManagerDelegate {
-    var onLocation: ((CLLocation) -> Void)?
-    private let manager = CLLocationManager()
-
-    override init() {
-        super.init()
-        manager.delegate = self
-        manager.desiredAccuracy = kCLLocationAccuracyBest
-        manager.distanceFilter = 15
-    }
-
-    func start() {
-        switch manager.authorizationStatus {
-        case .notDetermined:
-            manager.requestWhenInUseAuthorization()
-        case .authorizedAlways, .authorizedWhenInUse:
-            manager.startUpdatingLocation()
-        default:
-            break
-        }
-    }
-
-    func stop() {
-        manager.stopUpdatingLocation()
-    }
-
-    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        if manager.authorizationStatus == .authorizedAlways || manager.authorizationStatus == .authorizedWhenInUse {
-            manager.startUpdatingLocation()
-        }
-    }
-
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let location = locations.last, location.horizontalAccuracy >= 0 else { return }
-        onLocation?(location)
     }
 }

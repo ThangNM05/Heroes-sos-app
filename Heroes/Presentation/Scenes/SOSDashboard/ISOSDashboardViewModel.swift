@@ -25,5 +25,6 @@ protocol ISOSDashboardViewModel: AnyObject {
     func resolveEmergency()
     func toggleSiren()
     func toggleAudioRecording()
-    func loadDashboardData()
+    func loadDashboardData(session: AppSessionStore)
+    func stop()
 }

@@ -214,6 +214,8 @@ private struct SOSDTO: Decodable {
     let viewerAcknowledged: Bool?
     let viewerSupportMode: String?
     let recordings: [RecordingDTO]?
+    let chatId: String?
+    let chatPath: String?
 
     private struct Owner: Decodable {
         let id: String?
@@ -234,6 +236,7 @@ private struct SOSDTO: Decodable {
         case id, mongoID = "_id", owner, ownerId, ownerName, ownerPhone, ownerAvatarUrl
         case message, status, startedAt, createdAt, currentLocation, location
         case responderCount, respondersCount, viewerAcknowledged, viewerSupportMode, supportMode, recordings
+        case chatId, chatPath
     }
 
     init(from decoder: Decoder) throws {
@@ -256,6 +259,8 @@ private struct SOSDTO: Decodable {
         viewerSupportMode = try c.decodeIfPresent(String.self, forKey: .viewerSupportMode)
             ?? c.decodeIfPresent(String.self, forKey: .supportMode)
         recordings = try c.decodeIfPresent([RecordingDTO].self, forKey: .recordings)
+        chatId = try c.decodeIfPresent(String.self, forKey: .chatId)
+        chatPath = try c.decodeIfPresent(String.self, forKey: .chatPath)
     }
 
     var domain: SOSAlert {
@@ -284,7 +289,9 @@ private struct SOSDTO: Decodable {
             respondersCount: responderCount ?? 0,
             message: message,
             viewerAcknowledged: viewerAcknowledged ?? false,
-            viewerSupportMode: viewerSupportMode.flatMap(SOSSupportMode.init(rawValue:))
+            viewerSupportMode: viewerSupportMode.flatMap(SOSSupportMode.init(rawValue:)),
+            chatId: chatId,
+            chatPath: chatPath
         )
     }
 }
