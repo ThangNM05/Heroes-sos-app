@@ -1,17 +1,18 @@
 //
 //  AppRelease.xcconfig
-//  BaseProject
+//  HEROS
 //
 
-// Define
+// Protocol
 PROTOCOL_HTTP = http:/
 PROTOCOL_HTTPS = https:/
 
 // Server
-BaseURL                     = $(PROTOCOL_HTTPS)/api.example.com/
+BaseURL                     = $(PROTOCOL_HTTPS)/heros.nextteam.site/v1
+APS_ENVIRONMENT             = production
 SearchAdsTrackingBaseURL    = $(PROTOCOL_HTTPS)/appletracking.addonsmaster.com/
 
-// AppInfo
+// App info
 AppName                     = HEROS
 ApplicationID               = id1498001784
 BundleVersion               = 1
@@ -24,7 +25,7 @@ TermOfUseUrl                = $(PROTOCOL_HTTPS)/example.com/terms
 RefundUrl                   = $(PROTOCOL_HTTPS)/example.com/refund
 EnableShowUpdateAppDialog   = YES
 
-// InAppPurchase
+// In-app purchase
 EnableShowInApp             = YES
 EnableShowInAppWhenOpenApp  = YES
 LimitedFeature              = YES
@@ -34,6 +35,6 @@ IAPWeekly                   = com.test.new.weekly
 IAPMonthly                  = com.test.new.monthly
 IAPYearly                   = com.test.new.yearly
 
-// LocalNotification
+// Local notification
 EnableLocalNotification     = NO
 TimeTriggerNotification     = 81600

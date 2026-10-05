@@ -18,14 +18,18 @@ enum APILogger {
     static func logRequest(_ request: URLRequest?, target: TargetType) {
         #if DEBUG
         let method = request?.httpMethod ?? target.method.rawValue
-        let url = request?.url?.absoluteString ?? target.baseURL.appendingPathComponent(target.path).absoluteString
+        let url = sanitizedURL(request?.url)?.absoluteString
+            ?? sanitizedURL(target.baseURL.appendingPathComponent(target.path))?.absoluteString
+            ?? "<invalid-url>"
         print("\n🚀 [API REQUEST] ==================================")
         print("URL: \(url)")
         print("Method: \(method)")
         if let headers = request?.allHTTPHeaderFields, !headers.isEmpty {
-            print("Headers: \(headers)")
+            print("Headers: \(sanitizedHeaders(headers))")
         }
-        if let body = request?.httpBody, let bodyString = preview(data: body) {
+        if shouldLogBody(contentType: request?.value(forHTTPHeaderField: "Content-Type")),
+           let body = request?.httpBody,
+           let bodyString = preview(data: body) {
             print("Body: \(bodyString)")
         }
         print("===================================================\n")
@@ -34,7 +38,9 @@ enum APILogger {
 
     static func logResponse(_ response: Moya.Response, target: TargetType) {
         #if DEBUG
-        let url = response.request?.url?.absoluteString ?? target.baseURL.appendingPathComponent(target.path).absoluteString
+        let url = sanitizedURL(response.request?.url)?.absoluteString
+            ?? sanitizedURL(target.baseURL.appendingPathComponent(target.path))?.absoluteString
+            ?? "<invalid-url>"
         print("\n✅ [API RESPONSE] ==================================")
         print("Status Code: \(response.statusCode)")
         print("URL: \(url)")
@@ -60,13 +66,70 @@ enum APILogger {
     private static func preview(data: Data, limit: Int = 2_000) -> String? {
         guard !data.isEmpty else { return nil }
         let clippedData = data.count > limit ? Data(data.prefix(limit)) : data
-        guard var text = String(data: clippedData, encoding: .utf8) else {
+        guard var text = sanitizedJSONText(from: clippedData) ?? String(data: clippedData, encoding: .utf8) else {
             return "<\(data.count) bytes>"
         }
         if data.count > limit {
             text += "... <truncated \(data.count - limit) bytes>"
         }
         return text
+    }
+
+    private static func sanitizedHeaders(_ headers: [String: String]) -> [String: String] {
+        let sensitiveNames = [
+            "authorization", "cookie", "set-cookie", "x-heros-device-token", "x-heros-ops-token"
+        ]
+        return headers.mapValues { $0 }.reduce(into: [:]) { result, item in
+            result[item.key] = sensitiveNames.contains(item.key.lowercased()) ? "<redacted>" : item.value
+        }
+    }
+
+    private static func sanitizedURL(_ url: URL?) -> URL? {
+        guard let url, var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
+        let sensitiveNames = ["code", "token", "otp", "invite", "invitationCode"]
+        components.fragment = nil
+        components.queryItems = components.queryItems?.map { item in
+            sensitiveNames.contains(where: { $0.caseInsensitiveCompare(item.name) == .orderedSame })
+                ? URLQueryItem(name: item.name, value: "<redacted>")
+                : item
+        }
+        return components.url
+    }
+
+    private static func shouldLogBody(contentType: String?) -> Bool {
+        guard let contentType else { return true }
+        return !contentType.lowercased().contains("multipart/form-data")
+    }
+
+    private static func sanitizedJSONText(from data: Data) -> String? {
+        guard let object = try? JSONSerialization.jsonObject(with: data),
+              JSONSerialization.isValidJSONObject(object),
+              let sanitized = sanitizeJSON(object),
+              let sanitizedData = try? JSONSerialization.data(withJSONObject: sanitized, options: [.sortedKeys]) else {
+            return nil
+        }
+        return String(data: sanitizedData, encoding: .utf8)
+    }
+
+    private static func sanitizeJSON(_ value: Any) -> Any? {
+        let sensitiveNames = [
+            "password", "otp", "token", "accessToken", "refreshToken", "identityToken", "challengeId",
+            "rawNonce", "deviceToken", "authorization", "phone", "latitude", "longitude"
+        ]
+
+        if let dictionary = value as? [String: Any] {
+            return dictionary.reduce(into: [String: Any]()) { result, item in
+                if sensitiveNames.contains(where: { $0.caseInsensitiveCompare(item.key) == .orderedSame }) {
+                    result[item.key] = "<redacted>"
+                } else {
+                    result[item.key] = sanitizeJSON(item.value) ?? NSNull()
+                }
+            }
+        }
+        if let array = value as? [Any] {
+            return array.map { sanitizeJSON($0) ?? NSNull() }
+        }
+        return value
     }
 }
 

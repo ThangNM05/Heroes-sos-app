@@ -34,6 +34,7 @@ enum Configs {
         static var baseURL: String { AppConfigs.shared.baseURL() }
         static let perPage = 10
         static let networkTimeout: TimeInterval = 30 // seconds
+        static let resourceTimeout: TimeInterval = 120 // multipart/audio
     }
     
     // MARK: - InAppPurchase
@@ -96,7 +97,7 @@ fileprivate class AppConfigs {
     func enableShowUpdateAppDialog() -> Bool { boolValue(forKey: "EnableShowUpdateAppDialog", fallback: true) }
     
     // MARK: Server
-    func baseURL() -> String { infoValue(forKey: "BaseURL", fallback: "https://api.example.com/") }
+    func baseURL() -> String { infoValue(forKey: "BaseURL", fallback: "https://heros.nextteam.site/v1") }
     func searchAdsTrackingBaseURL() -> String { infoValue(forKey: "SearchAdsTrackingBaseURL", fallback: "https://appletracking.addonsmaster.com/") }
     
     // MARK: InAppPurchase

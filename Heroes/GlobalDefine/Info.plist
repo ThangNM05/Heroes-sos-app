@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>BaseURL</key>
+	<string>$(BaseURL)</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
@@ -18,6 +20,17 @@
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$(BundleVersionString)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>heros</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>$(BundleVersion)</string>
 	<key>LSRequiresIPhoneOS</key>
@@ -26,12 +39,16 @@
 	<string>Ứng dụng cần kết nối Bluetooth để nhận tín hiệu bấm nút khẩn cấp và kích hoạt còi hú từ thiết bị ngoại vi SOS.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>Ứng dụng cần kết nối Bluetooth với thiết bị phần cứng SOS để duy trì trạng thái cứu trợ khẩn cấp.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>HEROS cần truy cập camera để bạn chụp ảnh đại diện.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Ứng dụng cần truy cập vị trí liên tục để cập nhật lộ trình cứu hộ khẩn cấp ngay cả khi ứng dụng đang chạy ngầm.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Ứng dụng cần truy cập vị trí để xác định toạ độ và gửi tín hiệu cứu hộ khẩn cấp SOS.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Ứng dụng cần sử dụng Micro để ghi âm cuộc đối thoại hiện trường làm bằng chứng pháp lý khi kích hoạt SOS.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>HEROS cần truy cập thư viện ảnh để bạn chọn ảnh đại diện.</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>Inter-Regular.ttf</string>

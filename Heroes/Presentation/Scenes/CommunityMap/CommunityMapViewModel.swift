@@ -1,215 +1,318 @@
-//
-//  CommunityMapViewModel.swift
-//  BaseProject
-//
-//  Created by Thang Nguyen Minh on 8/31/2026.
-//  Copyright © 2026 Thang Nguyen Minh. All rights reserved.
-//
-
 import Foundation
-import MapKit
 import Combine
+import MapKit
 
 @MainActor
 final class CommunityMapViewModel: BaseViewModel, ICommunityMapViewModel {
     @Published var alerts: [SOSAlert] = []
-    @Published var selectedAlert: SOSAlert? = nil
-    @Published var isPlayingAudio: Bool = false
-    @Published var activeAudioRecord: AudioRecord? = nil
-    @Published var audioPlaybackProgress: Double = 0.0
-    @Published var isRespondingSuccess: Bool = false
-    @Published var actionToastMessage: String? = nil
-
+    @Published var selectedAlert: SOSAlert?
     @Published var region = MKCoordinateRegion(
-        center: CLLocationCoordinate2D(latitude: 21.028511, longitude: 105.854444),
-        span: MKCoordinateSpan(latitudeDelta: 0.04, longitudeDelta: 0.04)
+        center: CLLocationCoordinate2D(latitude: 21.028511, longitude: 105.804817),
+        span: MKCoordinateSpan(latitudeDelta: 0.045, longitudeDelta: 0.045)
     )
+    @Published private(set) var activeAudioRecord: AudioRecord?
+    @Published private(set) var isPlayingAudio = false
+    @Published private(set) var isLoadingAudio = false
 
     private let sosService: ISOSService
-    private var playbackTimer: AnyCancellable?
+    private let repository: ISOSAPIRepository
+    private let realtimeClient: ISOSRealtimeClient
+    private let audioPlayer: ProtectedAudioPlayer
+    private let locationProvider = CurrentSOSLocationProvider()
+    private var role: HEROSUserRole = .trustedContact
+    private var currentUser: HEROSAccount?
+    private weak var session: AppSessionStore?
+    private var cancellables = Set<AnyCancellable>()
+    private var latestLocation: CLLocation?
+    private var lastLocationUploadAt: Date?
 
-    init(sosService: ISOSService) {
+    init(
+        sosService: ISOSService,
+        sosAPIRepository: ISOSAPIRepository,
+        realtimeClient: ISOSRealtimeClient,
+        audioPlayer: ProtectedAudioPlayer
+    ) {
         self.sosService = sosService
+        self.repository = sosAPIRepository
+        self.realtimeClient = realtimeClient
+        self.audioPlayer = audioPlayer
         super.init()
-    }
-
-    func loadCommunityAlerts() {
-        isLoading = true
-        Task {
-            do {
-                self.alerts = try await sosService.fetchCommunityAlerts()
-                if let first = self.alerts.first {
-                    self.region.center = first.coordinate
-                }
-                self.isLoading = false
-            } catch {
-                self.isLoading = false
-                self.handleError(error)
-            }
+        bindAudioPlayer()
+        bindRealtime()
+        locationProvider.onLocation = { [weak self] location in
+            self?.receive(location)
         }
     }
 
-    func loadAlerts(for role: HEROSUserRole) {
+    func loadAlerts(for role: HEROSUserRole, currentUser: HEROSAccount?, session: AppSessionStore) {
+        self.role = role
+        self.currentUser = currentUser
+        self.session = session
+        if role == .deviceOwner { locationProvider.start() }
+        reconnectRealtime(session: session)
+        reloadFromServer()
+    }
+
+    func reloadFromServer() {
+        guard let session else { return }
         isLoading = true
         Task {
+            defer { isLoading = false }
             do {
+                let freshAlerts: [SOSAlert]
                 if role == .deviceOwner {
-                    self.alerts = sosService.getActiveSOSAlert().map { [$0] } ?? []
+                    let active = try await session.performAuthenticatedRequest {
+                        try await self.repository.fetchOwnerActiveSOS(accessToken: $0)
+                    }
+                    freshAlerts = active.map { [$0] } ?? []
                 } else {
-                    self.alerts = try await sosService.fetchCommunityAlerts().filter {
-                        $0.status != .resolved && $0.senderId != "current_user"
+                    freshAlerts = try await session.performAuthenticatedRequest {
+                        try await self.repository.fetchIncomingSOS(accessToken: $0)
                     }
                 }
-                if let first = self.alerts.first { self.region.center = first.coordinate }
-                self.isLoading = false
+                apply(freshAlerts)
             } catch {
-                self.isLoading = false
-                self.handleError(error)
+                handleError(error)
             }
         }
     }
 
-    func triggerMockSOS() {
+    func triggerSOS(currentUser: HEROSAccount?, session: AppSessionStore) {
+        let coordinate = latestLocation?.coordinate ?? region.center
+        let location = SOSLocationUpdate(
+            latitude: coordinate.latitude,
+            longitude: coordinate.longitude,
+            accuracy: latestLocation?.horizontalAccuracy ?? 0,
+            recordedAt: latestLocation?.timestamp ?? Date(),
+            address: nil
+        )
         isLoading = true
         Task {
+            defer { isLoading = false }
             do {
-                let record = AudioRecord(
-                    id: "REC-\(Int.random(in: 100...999))",
-                    title: "Ghi âm trực tiếp",
-                    durationSeconds: 12,
-                    recordedAt: Date(),
-                    fileURL: "secure-stream://live",
-                    isEvidence: true
-                )
-                let alert = try await sosService.triggerEmergencySOS(
-                    latitude: 21.028511,
-                    longitude: 105.854444,
-                    address: "Phố Đinh Tiên Hoàng, P. Lý Thái Tổ, Q. Hoàn Kiếm, Hà Nội",
-                    initialAudio: record,
-                    isHardwareTriggered: false
-                )
-                self.alerts = [alert]
-                self.region.center = alert.coordinate
-                self.isLoading = false
+                let alert = try await session.performAuthenticatedRequest {
+                    try await self.repository.createSOS(
+                        location: location,
+                        message: "Tôi đang gặp sự cố, cần hỗ trợ!",
+                        clientRequestId: UUID().uuidString.lowercased(),
+                        accessToken: $0
+                    )
+                }
+                self.currentUser = currentUser
+                apply([alert])
+            } catch let error as APIError where error.serverCode == "SOS_ALREADY_ACTIVE" {
+                let active = try? await session.performAuthenticatedRequest {
+                    try await self.repository.fetchOwnerActiveSOS(accessToken: $0)
+                }
+                if let active { self.apply([active]) } else { self.handleError(error) }
             } catch {
-                self.isLoading = false
-                self.handleError(error)
+                handleError(error)
             }
         }
     }
 
-    func resolveOwnSOS() {
+    func resolveOwnSOS(session: AppSessionStore) {
         guard let alert = alerts.first else { return }
+        isLoading = true
+        Task {
+            defer { isLoading = false }
+            do {
+                try await session.performAuthenticatedRequest {
+                    try await self.repository.resolve(sosId: alert.id, accessToken: $0)
+                }
+                audioPlayer.clearAndStop()
+                clearSelection()
+                alerts = []
+            } catch {
+                handleError(error)
+            }
+        }
+    }
+
+    func respondToAlert(mode: SOSSupportMode, session: AppSessionStore) {
+        guard let alert = selectedAlert else { return }
+        isLoading = true
+        Task {
+            defer { isLoading = false }
+            do {
+                _ = try await session.performAuthenticatedRequest {
+                    try await self.repository.acknowledge(sosId: alert.id, mode: mode, accessToken: $0)
+                }
+                let updated = try await session.performAuthenticatedRequest {
+                    try await self.repository.fetchSOS(id: alert.id, accessToken: $0)
+                }
+                replace(updated)
+            } catch {
+                handleError(error)
+            }
+        }
+    }
+
+    func updateActiveSOSLocation(_ location: SOSLocationUpdate, session: AppSessionStore) {
+        guard role == .deviceOwner, let active = alerts.first else { return }
         Task {
             do {
-                try await sosService.resolveActiveSOS(id: alert.id)
-                self.alerts = []
-                self.selectedAlert = nil
-                self.stopAudio()
-                self.showToast("Đã xác nhận an toàn. Quyền nghe bản ghi của người nhận đã được thu hồi.")
+                let updated = try await session.performAuthenticatedRequest {
+                    try await self.repository.updateLocation(sosId: active.id, location: location, accessToken: $0)
+                }
+                replace(updated)
             } catch {
-                self.handleError(error)
+                handleError(error)
             }
         }
     }
 
     func selectAlert(_ alert: SOSAlert) {
-        self.selectedAlert = alert
-        self.region.center = alert.coordinate
+        selectedAlert = alert
     }
 
     func clearSelection() {
-        self.selectedAlert = nil
-        stopAudio()
+        selectedAlert = nil
     }
 
-    func respondToAlert(isAccepting: Bool) {
-        guard let alert = selectedAlert else { return }
-        isLoading = true
-
-        Task {
-            do {
-                let updated = try await sosService.respondToAlert(alertId: alert.id, isAccepting: isAccepting)
-                self.selectedAlert = updated
-                self.alerts = try await sosService.fetchCommunityAlerts()
-                self.isLoading = false
-
-                if isAccepting {
-                    self.isRespondingSuccess = true
-                    self.showToast("Cảm ơn bạn! Hệ thống đã ghi nhận bạn là nguồn hỗ trợ và thông báo tới thiết bị nạn nhân.")
-                } else {
-                    self.showToast("Đã chọn hỗ trợ từ xa. Hãy gọi điện hoặc giữ liên lạc với người thân.")
-                    self.selectedAlert = nil
-                }
-            } catch {
-                self.isLoading = false
-                self.handleError(error)
-            }
-        }
-    }
-
-    func submitReport(reason: FalseAlarmReport.ReportReason, note: String) {
-        guard let alert = selectedAlert else { return }
-        isLoading = true
-
-        let report = FalseAlarmReport(
-            id: "RPT-\(Int.random(in: 100...999))",
-            alertId: alert.id,
-            reporterName: "Bạn (Cộng tác viên)",
-            reporterPhone: "0900 111 222",
-            reason: reason,
-            note: note,
-            createdAt: Date()
-        )
-
-        Task {
-            do {
-                try await sosService.reportFalseAlarm(report)
-                self.isLoading = false
-                self.showToast("Đã gửi báo cáo. Tổng đài viên HEROS sẽ xác minh xử lý tài khoản vi phạm.")
-            } catch {
-                self.isLoading = false
-                self.handleError(error)
-            }
-        }
-    }
-
-    func playEvidenceAudio(record: AudioRecord) {
-        if activeAudioRecord?.id == record.id && isPlayingAudio {
-            stopAudio()
-            return
-        }
-
-        activeAudioRecord = record
-        isPlayingAudio = true
-        audioPlaybackProgress = 0.0
-
-        playbackTimer?.cancel()
-        playbackTimer = Timer.publish(every: 0.5, on: .main, in: .common)
-            .autoconnect()
-            .sink { [weak self] _ in
-                guard let self = self else { return }
-                if self.audioPlaybackProgress < 1.0 {
-                    self.audioPlaybackProgress += 0.08
-                } else {
-                    self.stopAudio()
-                }
-            }
+    func playEvidenceAudio(record: AudioRecord, session: AppSessionStore) {
+        guard let sosId = record.sosId ?? selectedAlert?.id else { return }
+        audioPlayer.play(record: record, sosId: sosId, session: session)
     }
 
     func stopAudio() {
-        isPlayingAudio = false
-        playbackTimer?.cancel()
-        audioPlaybackProgress = 0.0
+        audioPlayer.stop()
     }
 
-    private func showToast(_ message: String) {
-        self.actionToastMessage = message
+    func stopAudioAndClearCache() {
+        audioPlayer.clearAndStop()
+    }
+
+    func reconnectRealtime(session: AppSessionStore) {
+        guard let token = session.activeAccessToken else {
+            realtimeClient.disconnect()
+            return
+        }
+        realtimeClient.connect(accessToken: token)
+    }
+
+    func disconnectRealtime() {
+        realtimeClient.disconnect()
+        locationProvider.stop()
+        audioPlayer.stop()
+    }
+
+    func submitReport(_ report: FalseAlarmReport) {
         Task {
-            try? await Task.sleep(nanoseconds: 3_000_000_000)
-            if self.actionToastMessage == message {
-                self.actionToastMessage = nil
+            do { try await sosService.reportFalseAlarm(report) }
+            catch { handleError(error) }
+        }
+    }
+
+    private func bindAudioPlayer() {
+        audioPlayer.$activeRecordingID
+            .combineLatest(audioPlayer.$isPlaying, audioPlayer.$isLoading)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] recordingID, isPlaying, isLoading in
+                guard let self else { return }
+                activeAudioRecord = alerts
+                    .flatMap(\.audioRecords)
+                    .first { $0.id == recordingID }
+                isPlayingAudio = isPlaying
+                isLoadingAudio = isLoading
+            }
+            .store(in: &cancellables)
+    }
+
+    private func bindRealtime() {
+        realtimeClient.onConnected = { [weak self] in
+            Task { @MainActor in self?.reloadFromServer() }
+        }
+        realtimeClient.onEvent = { [weak self] event in
+            Task { @MainActor in
+                guard let self else { return }
+                switch event {
+                case .resolved, .cancelled:
+                    self.audioPlayer.clearAndStop()
+                default:
+                    break
+                }
+                self.reloadFromServer()
             }
         }
+    }
+
+    private func apply(_ freshAlerts: [SOSAlert]) {
+        alerts = freshAlerts.filter { $0.status != .resolved && $0.status != .cancelled }
+        if let selectedID = selectedAlert?.id {
+            selectedAlert = alerts.first { $0.id == selectedID }
+            if selectedAlert == nil { audioPlayer.clearAndStop() }
+        }
+        if let first = alerts.first, first.latitude != 0 || first.longitude != 0 {
+            region.center = first.coordinate
+        }
+    }
+
+    private func replace(_ alert: SOSAlert) {
+        if let index = alerts.firstIndex(where: { $0.id == alert.id }) {
+            alerts[index] = alert
+        } else {
+            alerts.insert(alert, at: 0)
+        }
+        if selectedAlert?.id == alert.id { selectedAlert = alert }
+    }
+
+    private func receive(_ location: CLLocation) {
+        latestLocation = location
+        region.center = location.coordinate
+        guard role == .deviceOwner,
+              let session,
+              !alerts.isEmpty,
+              Date().timeIntervalSince(lastLocationUploadAt ?? .distantPast) >= 10 else { return }
+        lastLocationUploadAt = Date()
+        updateActiveSOSLocation(
+            SOSLocationUpdate(
+                latitude: location.coordinate.latitude,
+                longitude: location.coordinate.longitude,
+                accuracy: location.horizontalAccuracy,
+                recordedAt: location.timestamp,
+                address: nil
+            ),
+            session: session
+        )
+    }
+}
+
+@MainActor
+private final class CurrentSOSLocationProvider: NSObject, CLLocationManagerDelegate {
+    var onLocation: ((CLLocation) -> Void)?
+    private let manager = CLLocationManager()
+
+    override init() {
+        super.init()
+        manager.delegate = self
+        manager.desiredAccuracy = kCLLocationAccuracyBest
+        manager.distanceFilter = 15
+    }
+
+    func start() {
+        switch manager.authorizationStatus {
+        case .notDetermined:
+            manager.requestWhenInUseAuthorization()
+        case .authorizedAlways, .authorizedWhenInUse:
+            manager.startUpdatingLocation()
+        default:
+            break
+        }
+    }
+
+    func stop() {
+        manager.stopUpdatingLocation()
+    }
+
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        if manager.authorizationStatus == .authorizedAlways || manager.authorizationStatus == .authorizedWhenInUse {
+            manager.startUpdatingLocation()
+        }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard let location = locations.last, location.horizontalAccuracy >= 0 else { return }
+        onLocation?(location)
     }
 }

@@ -13,6 +13,9 @@ import Alamofire
 struct APIError: Error, LocalizedError {
     var description: String
     let statusCode: Int?
+    let serverCode: String?
+    let serverMessage: String?
+    let retryAfter: TimeInterval?
     let requestURL: URL?
     let responseData: Data?
     let underlyingError: Error?
@@ -25,6 +28,9 @@ struct APIError: Error, LocalizedError {
         APIError(
             description: "Invalid API URL: \(baseURL) \(path)",
             statusCode: nil,
+            serverCode: nil,
+            serverMessage: nil,
+            retryAfter: nil,
             requestURL: nil,
             responseData: nil,
             underlyingError: nil
@@ -33,9 +39,14 @@ struct APIError: Error, LocalizedError {
 
     static func httpStatus(_ response: Moya.Response, target: TargetType) -> APIError {
         let statusMessage = HTTPURLResponse.localizedString(forStatusCode: response.statusCode)
+        let serverError = try? APICoding.makeDecoder().decode(APIErrorEnvelope.self, from: response.data)
+        let message = serverError?.data?.message ?? "API request failed with status \(response.statusCode): \(statusMessage)"
         return APIError(
-            description: "API request failed with status \(response.statusCode): \(statusMessage)",
+            description: message,
             statusCode: response.statusCode,
+            serverCode: serverError?.data?.errorCode,
+            serverMessage: serverError?.data?.message,
+            retryAfter: retryAfter(from: response.response),
             requestURL: requestURL(from: response, target: target),
             responseData: response.data,
             underlyingError: nil
@@ -46,6 +57,9 @@ struct APIError: Error, LocalizedError {
         APIError(
             description: "API decode failed: \(error.localizedDescription)",
             statusCode: response.statusCode,
+            serverCode: nil,
+            serverMessage: nil,
+            retryAfter: nil,
             requestURL: requestURL(from: response, target: target),
             responseData: response.data,
             underlyingError: error
@@ -56,6 +70,9 @@ struct APIError: Error, LocalizedError {
         APIError(
             description: "API encode failed: \(error.localizedDescription)",
             statusCode: nil,
+            serverCode: nil,
+            serverMessage: nil,
+            retryAfter: nil,
             requestURL: APIEndpoint.url(path: path, baseURL: baseURL),
             responseData: nil,
             underlyingError: error
@@ -71,6 +88,13 @@ struct APIError: Error, LocalizedError {
             return APIError(
                 description: "API request error: \(moyaError.localizedDescription)",
                 statusCode: moyaError.response?.statusCode,
+                serverCode: moyaError.response.flatMap { response in
+                    (try? APICoding.makeDecoder().decode(APIErrorEnvelope.self, from: response.data))?.data?.errorCode
+                },
+                serverMessage: moyaError.response.flatMap { response in
+                    (try? APICoding.makeDecoder().decode(APIErrorEnvelope.self, from: response.data))?.data?.message
+                },
+                retryAfter: moyaError.response.flatMap { retryAfter(from: $0.response) },
                 requestURL: moyaError.response.flatMap { response in
                     target.flatMap { requestURL(from: response, target: $0) }
                 },
@@ -82,6 +106,9 @@ struct APIError: Error, LocalizedError {
         return APIError(
             description: "API request error: \(error.localizedDescription)",
             statusCode: nil,
+            serverCode: nil,
+            serverMessage: nil,
+            retryAfter: nil,
             requestURL: nil,
             responseData: nil,
             underlyingError: error
@@ -90,5 +117,13 @@ struct APIError: Error, LocalizedError {
 
     private static func requestURL(from response: Moya.Response, target: TargetType) -> URL? {
         response.request?.url ?? APIEndpoint.url(path: target.path, baseURL: target.baseURL.absoluteString)
+    }
+
+    private static func retryAfter(from response: HTTPURLResponse?) -> TimeInterval? {
+        guard let value = response?.value(forHTTPHeaderField: "Retry-After") else { return nil }
+        if let seconds = TimeInterval(value) {
+            return seconds
+        }
+        return nil
     }
 }
