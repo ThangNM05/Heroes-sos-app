@@ -9,13 +9,15 @@
 import SwiftUI
 
 struct SOSDashboardView: View {
+    @EnvironmentObject private var session: AppSessionStore
     @StateObject private var viewModel: SOSDashboardViewModel
     @State private var isPulseAnimating = false
 
     init(viewModel: SOSDashboardViewModel? = nil) {
         let vm = viewModel ?? SOSDashboardViewModel(
             sosService: AppDIContainer.shared.resolve(),
-            deviceService: AppDIContainer.shared.resolve()
+            deviceService: AppDIContainer.shared.resolve(),
+            repository: AppDIContainer.shared.resolve()
         )
         _viewModel = StateObject(wrappedValue: vm)
     }
@@ -33,6 +35,10 @@ struct SOSDashboardView: View {
                         // MARK: - 2. Active Emergency Banner (if active)
                         if viewModel.isEmergencyActive {
                             activeEmergencyBanner
+                            if let chatId = viewModel.activeSOSAlert?.chatId {
+                                Button("Mở nhóm hỗ trợ SOS") { session.openSOSChat(chatId) }
+                                    .buttonStyle(.borderedProminent)
+                            }
                         }
 
                         // MARK: - 3. Target Recipient Info Pill
@@ -66,9 +72,25 @@ struct SOSDashboardView: View {
             }
             .navigationTitle("Khẩn Cấp SOS")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink { SOSChatListView() } label: {
+                        Image(systemName: "bubble.left.and.bubble.right")
+                    }.accessibilityLabel("Nhóm hỗ trợ SOS")
+                }
+            }
             .onAppear {
-                viewModel.loadDashboardData()
+                viewModel.loadDashboardData(session: session)
                 isPulseAnimating = true
+            }
+            .onDisappear { viewModel.stop() }
+            .alert("Không thể thực hiện", isPresented: Binding(
+                get: { viewModel.errorMessage != nil },
+                set: { if !$0 { viewModel.errorMessage = nil } }
+            )) {
+                Button("Đóng", role: .cancel) { viewModel.errorMessage = nil }
+            } message: {
+                Text(viewModel.errorMessage ?? "Đã xảy ra lỗi.")
             }
         }
     }
@@ -170,7 +192,7 @@ struct SOSDashboardView: View {
                         Image(systemName: "waveform")
                             .foregroundColor(.red)
                             .font(.system(size: 13))
-                        Text("Bản ghi âm bằng chứng đang được lưu trữ và truyền trực tiếp")
+                        Text("Đoạn ghi âm sẽ được tải lên bảo mật khi kết thúc")
                             .font(Theme.Fonts.regular.swiftUI(size: 12))
                             .foregroundColor(Theme.Colors.textSecondaryColor)
                     }
@@ -377,16 +399,16 @@ struct SOSDashboardView: View {
 
             // Live Waveform Visualizer
             HStack(spacing: 4) {
-                ForEach(0..<viewModel.simulatedAudioWaveform.count, id: \.self) { index in
+                ForEach(0..<viewModel.audioWaveform.count, id: \.self) { index in
                     RoundedRectangle(cornerRadius: 2)
                         .fill(Color.red.opacity(0.8))
-                        .frame(width: 4, height: 28 * viewModel.simulatedAudioWaveform[index])
-                        .animation(.easeInOut(duration: 0.15), value: viewModel.simulatedAudioWaveform[index])
+                        .frame(width: 4, height: 28 * viewModel.audioWaveform[index])
+                        .animation(.easeInOut(duration: 0.15), value: viewModel.audioWaveform[index])
                 }
             }
             .frame(height: 32)
 
-            Text("Tệp ghi âm sẽ tự động mã hoá và lưu trên hệ thống để làm bằng chứng pháp lý.")
+            Text("Tệp ghi âm sẽ được bảo vệ và tải lên hệ thống khi kết thúc để làm bằng chứng pháp lý.")
                 .font(Theme.Fonts.regular.swiftUI(size: 11))
                 .foregroundColor(Theme.Colors.textSecondaryColor)
                 .multilineTextAlignment(.center)

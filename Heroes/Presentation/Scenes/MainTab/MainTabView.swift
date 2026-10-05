@@ -20,10 +20,27 @@ struct MainTabView: View {
             PendingContactInviteView()
                 .environmentObject(session)
         }
+        .fullScreenCover(isPresented: Binding(
+            get: { session.pendingSOSChatId != nil },
+            set: { if !$0 { session.pendingSOSChatId = nil } }
+        )) {
+            if let id = session.pendingSOSChatId {
+                NavigationStack {
+                    SOSChatView(chatId: id)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Đóng") { session.pendingSOSChatId = nil }
+                            }
+                        }
+                }
+            }
+        }
     }
 
     private var ownerTabs: some View {
         TabView {
+            SOSDashboardView()
+                .tabItem { Label("SOS", systemImage: "sos.circle.fill") }
             CommunityMapView()
                 .tabItem { Label("Bản đồ", systemImage: "map.fill") }
             OwnerRecordingsView()

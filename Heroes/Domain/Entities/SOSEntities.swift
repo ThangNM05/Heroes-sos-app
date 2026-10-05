@@ -173,6 +173,8 @@ struct SOSAlert: Identifiable, Codable, Equatable {
     var message: String? = nil
     var viewerAcknowledged: Bool = false
     var viewerSupportMode: SOSSupportMode? = nil
+    var chatId: String? = nil
+    var chatPath: String? = nil
 
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)

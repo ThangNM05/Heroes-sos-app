@@ -56,6 +56,11 @@ struct CommunityMapView: View {
                 }
             }
             .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink { SOSChatListView() } label: {
+                        Image(systemName: "bubble.left.and.bubble.right")
+                    }.accessibilityLabel("Nhóm hỗ trợ SOS")
+                }
                 ToolbarItem(placement: .principal) {
                     HStack(spacing: 7) {
                         Image(systemName: "shield.fill").foregroundColor(Theme.Colors.primaryColor)
@@ -225,7 +230,12 @@ struct CommunityMapView: View {
             }
 
             Spacer()
-            if session.currentRole == .trustedContact {
+            if let chatId = alert.chatId {
+                Button("Mở nhóm hỗ trợ") {
+                    showingDetail = false
+                    session.openSOSChat(chatId)
+                }.buttonStyle(.borderedProminent)
+            } else if session.currentRole == .trustedContact {
                 HStack(spacing: 10) {
                     Button("Hỗ trợ từ xa") { viewModel.respondToAlert(mode: .remote, session: session); showingDetail = false }
                         .font(Theme.Fonts.bold.swiftUI(size: 13)).foregroundColor(Theme.Colors.primaryColor)

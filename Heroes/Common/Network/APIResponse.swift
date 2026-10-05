@@ -21,6 +21,7 @@ struct APIErrorData: Decodable {
     let errorCode: String?
     let message: String?
     let details: JSONValue?
+    let retryAfterSeconds: Double?
 }
 
 enum JSONValue: Decodable, Equatable {
