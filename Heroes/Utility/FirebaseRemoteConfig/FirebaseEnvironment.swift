@@ -20,6 +20,10 @@ class FirebaseEnvironment: AbstractEnvironment {
     func setupFirebase() {
         print("🔥 [FirebaseEnvironment] Setting up Firebase...")
         if FirebaseApp.app() == nil {
+            guard Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist") != nil else {
+                print("⚠️ [FirebaseEnvironment] GoogleService-Info.plist is missing; Firebase is disabled.")
+                return
+            }
             FirebaseApp.configure()
         }
         FirebaseConfiguration.shared.setLoggerLevel(.error)
@@ -35,6 +39,11 @@ class FirebaseEnvironment: AbstractEnvironment {
     func fetchConfig(completion: (() -> Void)? = nil) {
         if remoteConfig == nil {
             setupFirebase()
+        }
+
+        guard remoteConfig != nil else {
+            DispatchQueue.main.async { completion?() }
+            return
         }
 
         print("🔥 [FirebaseEnvironment] Fetching RemoteConfig parameters...")

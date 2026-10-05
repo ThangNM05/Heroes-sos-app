@@ -14,8 +14,6 @@ struct AuthenticationView: View {
                 SignUpView()
             case .verifyOTP:
                 OTPVerificationView()
-            case .bindDevice:
-                DeviceBindingView()
             }
         }
         .animation(.easeInOut(duration: 0.2), value: session.authStep)
@@ -48,8 +46,7 @@ private struct AuthBrandHeader: View {
 
 private struct SignInView: View {
     @EnvironmentObject private var session: AppSessionStore
-    @State private var email = "owner@heros.vn"
-    @State private var password = "123456"
+    @State private var email = ""
 
     var body: some View {
         ScrollView {
@@ -61,20 +58,21 @@ private struct SignInView: View {
 
                 VStack(spacing: 14) {
                     authField("Email", text: $email, icon: "envelope.fill")
-                    secureField("Mật khẩu", text: $password, icon: "lock.fill")
 
                     if let error = session.errorMessage {
                         errorText(error)
                     }
 
-                    Button("Đăng nhập") {
-                        session.signIn(email: email, password: password)
+                    Button {
+                        session.requestLoginOTP(email: email)
+                    } label: {
+                        authButtonLabel("Nhận mã đăng nhập", isLoading: session.isLoading)
                     }
                     .buttonStyle(HEROSPrimaryButtonStyle())
+                    .disabled(session.isLoading)
 
                     Button("Tạo tài khoản mới") {
-                        session.errorMessage = nil
-                        session.authStep = .signUp
+                        session.resetToSignUp()
                     }
                     .font(Theme.Fonts.semiBold.swiftUI(size: 14))
                     .foregroundColor(Theme.Colors.primaryColor)
@@ -83,15 +81,10 @@ private struct SignInView: View {
                 .background(Color.white)
                 .cornerRadius(20)
 
-                VStack(spacing: 6) {
-                    Text("Tài khoản demo")
-                        .font(Theme.Fonts.bold.swiftUI(size: 12))
-                        .foregroundColor(Theme.Colors.textPrimaryColor)
-                    Text("Chủ thiết bị: owner@heros.vn / 123456")
-                    Text("Người thân: contact@heros.vn / 123456")
-                }
-                .font(Theme.Fonts.regular.swiftUI(size: 12))
-                .foregroundColor(Theme.Colors.textSecondaryColor)
+                Text("Mã đăng nhập gồm 6 số sẽ được gửi đến email của bạn.")
+                    .font(Theme.Fonts.regular.swiftUI(size: 12))
+                    .foregroundColor(Theme.Colors.textSecondaryColor)
+                    .multilineTextAlignment(.center)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 36)
@@ -121,7 +114,7 @@ private struct SignUpView: View {
                         authField("Họ và tên", text: $fullName, icon: "person.fill")
                         authField("Email", text: $email, icon: "envelope.fill")
                         authField("Số điện thoại", text: $phone, icon: "phone.fill")
-                        secureField("Mật khẩu (tối thiểu 6 ký tự)", text: $password, icon: "lock.fill")
+                        secureField("Mật khẩu (8–128 ký tự)", text: $password, icon: "lock.fill")
 
                         DatePicker("Ngày sinh", selection: $dateOfBirth, displayedComponents: .date)
                             .font(Theme.Fonts.medium.swiftUI(size: 14))
@@ -174,7 +167,7 @@ private struct SignUpView: View {
                         errorText(error)
                     }
 
-                    Button("Tiếp tục xác minh") {
+                    Button {
                         session.beginRegistration(
                             fullName: fullName,
                             email: email,
@@ -183,8 +176,11 @@ private struct SignUpView: View {
                             role: role,
                             password: password
                         )
+                    } label: {
+                        authButtonLabel("Gửi mã xác minh", isLoading: session.isLoading)
                     }
                     .buttonStyle(HEROSPrimaryButtonStyle())
+                    .disabled(session.isLoading)
                 }
                 .padding(20)
             }
@@ -200,73 +196,110 @@ private struct SignUpView: View {
 
 private struct OTPVerificationView: View {
     @EnvironmentObject private var session: AppSessionStore
-    @State private var code = "123456"
+    @State private var code = ""
+    @State private var lastSubmittedCode = ""
+    @FocusState private var isCodeFieldFocused: Bool
 
     var body: some View {
         VStack(spacing: 22) {
             Spacer()
             AuthBrandHeader(
-                title: "Xác minh số điện thoại",
-                subtitle: "Nhập mã 6 số đã gửi tới \(session.pendingAccount?.phoneNumber ?? "số điện thoại của bạn")."
+                title: session.verificationPurpose == .login ? "Đăng nhập bằng OTP" : "Xác minh email",
+                subtitle: "Nhập mã 6 số đã gửi tới \(session.verificationEmail)."
             )
 
-            TextField("Mã OTP", text: $code)
-                .keyboardType(.numberPad)
-                .multilineTextAlignment(.center)
-                .font(Theme.Fonts.bold.swiftUI(size: 24))
-                .tracking(8)
-                .padding(16)
-                .background(Color.white)
-                .cornerRadius(14)
+            otpCodeField
 
             if let error = session.errorMessage { errorText(error) }
 
-            Button("Xác minh") { session.verifyOTP(code) }
-                .buttonStyle(HEROSPrimaryButtonStyle())
-
-            Text("Mã OTP demo: 123456")
-                .font(Theme.Fonts.regular.swiftUI(size: 12))
-                .foregroundColor(Theme.Colors.textSecondaryColor)
-            Spacer()
-        }
-        .padding(24)
-    }
-}
-
-private struct DeviceBindingView: View {
-    @EnvironmentObject private var session: AppSessionStore
-    @State private var serial = "HEROS-DEMO-001"
-
-    var body: some View {
-        VStack(spacing: 22) {
-            Spacer()
-            AuthBrandHeader(
-                title: "Kết nối thiết bị",
-                subtitle: "Mỗi thiết bị HEROS chỉ được liên kết với một tài khoản và một điện thoại."
-            )
-
-            VStack(spacing: 12) {
-                authField("Serial thiết bị", text: $serial, icon: "number")
-
-                Button {
-                    session.useDemoDevice()
-                } label: {
-                    Label("Quét QR demo", systemImage: "qrcode.viewfinder")
-                        .font(Theme.Fonts.semiBold.swiftUI(size: 14))
-                        .foregroundColor(Theme.Colors.primaryColor)
+            if session.isLoading {
+                HStack(spacing: 10) {
+                    ProgressView()
+                        .tint(Theme.Colors.primaryColor)
+                    Text("Đang xác minh mã...")
+                        .font(Theme.Fonts.medium.swiftUI(size: 13))
+                        .foregroundColor(Theme.Colors.textSecondaryColor)
                 }
             }
-            .padding(16)
-            .background(Color.white)
-            .cornerRadius(18)
 
-            if let error = session.errorMessage { errorText(error) }
+            Button("Gửi lại mã") {
+                code = ""
+                lastSubmittedCode = ""
+                session.resendOTP()
+                isCodeFieldFocused = true
+            }
+                .font(Theme.Fonts.semiBold.swiftUI(size: 13))
+                .foregroundColor(Theme.Colors.primaryColor)
+                .disabled(session.isLoading)
 
-            Button("Liên kết và hoàn tất") { session.bindDevice(serial: serial) }
-                .buttonStyle(HEROSPrimaryButtonStyle())
+            Button("Quay lại") {
+                if session.verificationPurpose == .register {
+                    session.resetToSignUp()
+                } else {
+                    session.resetToSignIn()
+                }
+            }
+            .font(Theme.Fonts.medium.swiftUI(size: 13))
+            .foregroundColor(Theme.Colors.textSecondaryColor)
             Spacer()
         }
         .padding(24)
+        .onAppear { isCodeFieldFocused = true }
+        .onChange(of: code) { _, newValue in
+            let sanitizedCode = String(newValue.filter(\.isNumber).prefix(6))
+            if sanitizedCode != newValue {
+                code = sanitizedCode
+                return
+            }
+
+            guard sanitizedCode.count == 6 else {
+                lastSubmittedCode = ""
+                return
+            }
+            guard sanitizedCode != lastSubmittedCode, !session.isLoading else { return }
+
+            lastSubmittedCode = sanitizedCode
+            isCodeFieldFocused = false
+            session.verifyOTP(sanitizedCode)
+        }
+    }
+
+    private var otpCodeField: some View {
+        let digits = Array(code)
+
+        return ZStack {
+            TextField("", text: $code)
+                .keyboardType(.numberPad)
+                .textContentType(.oneTimeCode)
+                .focused($isCodeFieldFocused)
+                .opacity(0.01)
+
+            HStack(spacing: 8) {
+                ForEach(0..<6, id: \.self) { index in
+                    Text(index < digits.count ? String(digits[index]) : "")
+                        .font(Theme.Fonts.bold.swiftUI(size: 23))
+                        .foregroundColor(Theme.Colors.textPrimaryColor)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.white)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(
+                                    index == min(digits.count, 5) && isCodeFieldFocused
+                                        ? Theme.Colors.primaryColor
+                                        : Color(Theme.Colors.bgColor),
+                                    lineWidth: 1.5
+                                )
+                        }
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+            }
+            .allowsHitTesting(false)
+        }
+        .frame(height: 54)
+        .contentShape(Rectangle())
+        .onTapGesture { isCodeFieldFocused = true }
+        .accessibilityLabel("Mã OTP gồm 6 chữ số")
+        .accessibilityValue(code)
     }
 }
 
@@ -313,4 +346,13 @@ private func errorText(_ message: String) -> some View {
         .font(Theme.Fonts.medium.swiftUI(size: 12))
         .foregroundColor(Theme.Colors.redColor)
         .frame(maxWidth: .infinity, alignment: .leading)
+}
+
+private func authButtonLabel(_ title: String, isLoading: Bool) -> some View {
+    HStack(spacing: 8) {
+        if isLoading {
+            ProgressView().tint(.white)
+        }
+        Text(title)
+    }
 }

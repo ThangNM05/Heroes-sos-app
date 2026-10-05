@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A20000013070000100A20001 /* SocketIO in Frameworks */ = {isa = PBXBuildFile; productRef = A20000033070000100A20003 /* SocketIO */; };
 		DF9CBF92303C2F2E00115190 /* Moya in Frameworks */ = {isa = PBXBuildFile; productRef = DF9CBF91303C2F2E00115190 /* Moya */; };
 		DF9CBF95303C2F2E00115190 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = DF9CBF94303C2F2E00115190 /* FirebaseAnalytics */; };
 		DF9CBF97303C2F2E00115190 /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = DF9CBF96303C2F2E00115190 /* FirebaseCrashlytics */; };
@@ -15,6 +16,8 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		A10000013058466C007442D2 /* Heroes/GlobalDefine/AppDebug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Heroes/GlobalDefine/AppDebug.xcconfig; sourceTree = SOURCE_ROOT; };
+		A10000023058466C007442D2 /* Heroes/GlobalDefine/AppRelease.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Heroes/GlobalDefine/AppRelease.xcconfig; sourceTree = SOURCE_ROOT; };
 		DF9CBF47303C2F2E00115190 /* Heros.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Heros.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -22,6 +25,8 @@
 		0C5BB8FF3058466C007442D2 /* Exceptions for "Heroes" folder in "Heros" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				GlobalDefine/AppDebug.xcconfig,
+				GlobalDefine/AppRelease.xcconfig,
 				GlobalDefine/Info.plist,
 			);
 			target = DF9CBF46303C2F2E00115190 /* Heros */;
@@ -44,6 +49,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A20000013070000100A20001 /* SocketIO in Frameworks */,
 				DF9CBF95303C2F2E00115190 /* FirebaseAnalytics in Frameworks */,
 				DF9CBF97303C2F2E00115190 /* FirebaseCrashlytics in Frameworks */,
 				DF9CBF99303C2F2E00115190 /* FirebaseRemoteConfig in Frameworks */,
@@ -55,11 +61,21 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		0C14E3263070B3F800F83E0D /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				A10000013058466C007442D2 /* Heroes/GlobalDefine/AppDebug.xcconfig */,
+				A10000023058466C007442D2 /* Heroes/GlobalDefine/AppRelease.xcconfig */,
+			);
+			name = "Recovered References";
+			sourceTree = "<group>";
+		};
 		DF9CBF3E303C2F2E00115190 = {
 			isa = PBXGroup;
 			children = (
 				DF9CBF49303C2F2E00115190 /* Heroes */,
 				DF9CBF48303C2F2E00115190 /* Products */,
+				0C14E3263070B3F800F83E0D /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -91,6 +107,7 @@
 			);
 			name = Heros;
 			packageProductDependencies = (
+				A20000033070000100A20003 /* SocketIO */,
 				DF9CBF94303C2F2E00115190 /* FirebaseAnalytics */,
 				DF9CBF96303C2F2E00115190 /* FirebaseCrashlytics */,
 				DF9CBF98303C2F2E00115190 /* FirebaseRemoteConfig */,
@@ -126,6 +143,7 @@
 			mainGroup = DF9CBF3E303C2F2E00115190;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				A20000023070000100A20002 /* XCRemoteSwiftPackageReference "socket.io-client-swift" */,
 				DF9CBF93303C2F2E00115190 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				DF9CBF90303C2F2E00115190 /* XCRemoteSwiftPackageReference "Moya" */,
 			);
@@ -281,9 +299,11 @@
 		};
 		DF9CBF53303C2F3000115190 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = A10000013058466C007442D2 /* Heroes/GlobalDefine/AppDebug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Heroes/Heros.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = JZS93S7CT7;
@@ -311,9 +331,11 @@
 		};
 		DF9CBF54303C2F3000115190 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = A10000023058466C007442D2 /* Heroes/GlobalDefine/AppRelease.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Heroes/Heros.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = JZS93S7CT7;
@@ -363,6 +385,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		A20000023070000100A20002 /* XCRemoteSwiftPackageReference "socket.io-client-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/socketio/socket.io-client-swift.git";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 16.1.1;
+			};
+		};
 		DF9CBF90303C2F2E00115190 /* XCRemoteSwiftPackageReference "Moya" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/Moya/Moya.git";
@@ -382,6 +412,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		A20000033070000100A20003 /* SocketIO */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A20000023070000100A20002 /* XCRemoteSwiftPackageReference "socket.io-client-swift" */;
+			productName = SocketIO;
+		};
 		DF9CBF91303C2F2E00115190 /* Moya */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = DF9CBF90303C2F2E00115190 /* XCRemoteSwiftPackageReference "Moya" */;

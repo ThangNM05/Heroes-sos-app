@@ -22,9 +22,11 @@ final class NetworkClient: INetworkClient {
     }
 
     private static func makeProvider() -> MoyaProvider<MultiTarget> {
-        let configuration = URLSessionConfiguration.default
+        let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = Configs.Network.networkTimeout
-        configuration.timeoutIntervalForResource = Configs.Network.networkTimeout
+        configuration.timeoutIntervalForResource = Configs.Network.resourceTimeout
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.urlCache = nil
 
         let session = Alamofire.Session(configuration: configuration, startRequestsImmediately: false)
         return MoyaProvider<MultiTarget>(session: session, plugins: [APILogger.plugin])
@@ -35,7 +37,7 @@ final class NetworkClient: INetworkClient {
             provider.request(MultiTarget(target)) { result in
                 switch result {
                 case .success(let response):
-                    guard (200..<300).contains(response.statusCode) else {
+                    guard HTTPStatus.isSuccess(response.statusCode) else {
                         let apiError = APIError.httpStatus(response, target: target)
                         APILogger.logError(apiError, target: target)
                         continuation.resume(throwing: apiError)
@@ -56,10 +58,32 @@ final class NetworkClient: INetworkClient {
         return res.data
     }
 
-    func request<T: Decodable>(_ target: TargetType, decoder: JSONDecoder = JSONDecoder()) async throws -> T {
+    func request<T: Decodable>(_ target: TargetType, decoder: JSONDecoder = APICoding.makeDecoder()) async throws -> T {
         let res = try await response(target)
         do {
             return try decoder.decode(T.self, from: res.data)
+        } catch {
+            let apiError = APIError.decoding(error, response: res, target: target)
+            APILogger.logError(apiError, target: target)
+            throw apiError
+        }
+    }
+
+
+    func requestEnvelope<T: Decodable>(
+        _ target: TargetType,
+        decoder: JSONDecoder = APICoding.makeDecoder()
+    ) async throws -> T {
+        let res = try await response(target)
+        do {
+            let envelope = try decoder.decode(APIResponse<T>.self, from: res.data)
+            guard envelope.success else {
+                throw APIError.httpStatus(res, target: target)
+            }
+            return envelope.data
+        } catch let error as APIError {
+            APILogger.logError(error, target: target)
+            throw error
         } catch {
             let apiError = APIError.decoding(error, response: res, target: target)
             APILogger.logError(apiError, target: target)

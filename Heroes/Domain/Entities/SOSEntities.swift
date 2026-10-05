@@ -141,6 +141,8 @@ struct AudioRecord: Identifiable, Codable, Equatable {
     var isEvidence: Bool
     var expiresAt: Date? = Calendar.current.date(byAdding: .day, value: 30, to: Date())
     var isOwnerOnly: Bool = true
+    var sosId: String? = nil
+    var mimeType: String? = nil
 
     var formattedDuration: String {
         let minutes = durationSeconds / 60
@@ -153,11 +155,11 @@ struct AudioRecord: Identifiable, Codable, Equatable {
 struct SOSAlert: Identifiable, Codable, Equatable {
     let id: String
     let senderId: String
-    let senderName: String
+    var senderName: String
     let senderPhone: String
-    let senderAvatar: String
-    let latitude: Double
-    let longitude: Double
+    var senderAvatarURL: String?
+    var latitude: Double
+    var longitude: Double
     var addressName: String
     let createdAt: Date
     var status: SOSStatus
@@ -168,9 +170,22 @@ struct SOSAlert: Identifiable, Codable, Equatable {
     var respondersCount: Int = 0
     var currentRadiusMeters: Double = 500
     var isCallFallbackTriggered: Bool = false
+    var message: String? = nil
+    var viewerAcknowledged: Bool = false
+    var viewerSupportMode: SOSSupportMode? = nil
 
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+    }
+
+    var senderInitials: String {
+        senderName
+            .split(separator: " ")
+            .suffix(2)
+            .compactMap(\.first)
+            .map(String.init)
+            .joined()
+            .uppercased()
     }
 
     var timeAgoString: String {
@@ -188,7 +203,24 @@ struct SOSAlert: Identifiable, Codable, Equatable {
         case active = "Đang tìm kiếm cứu hộ"
         case responding = "Đã có người ứng cứu"
         case resolved = "Đã an toàn"
+        case cancelled = "Đã hủy"
     }
+}
+
+enum SOSSupportMode: String, Codable, CaseIterable, Identifiable {
+    case inPerson = "in_person"
+    case remote
+
+    var id: String { rawValue }
+    var title: String { self == .inPerson ? "Tôi đang đến" : "Hỗ trợ từ xa" }
+}
+
+struct SOSLocationUpdate: Equatable {
+    let latitude: Double
+    let longitude: Double
+    let accuracy: Double
+    let recordedAt: Date
+    let address: String?
 }
 
 // MARK: - Emergency Contact
@@ -203,12 +235,47 @@ struct EmergencyContact: Identifiable, Codable, Equatable {
     var isNotifiedViaSMS: Bool
     var isNotifiedViaCall: Bool
     var invitationStatus: InvitationStatus = .accepted
+    var email: String? = nil
+    var linkedUserEmail: String? = nil
+    var inviteCode: String? = nil
+    var inviteURL: String? = nil
+    var inviteExpiresAt: Date? = nil
 
     enum InvitationStatus: String, Codable, CaseIterable {
         case pending = "Đã gửi lời mời"
         case accepted = "Đã kết nối"
         case expired = "Lời mời hết hạn"
+        case revoked = "Đã thu hồi"
+        case declined = "Đã từ chối"
     }
+}
+
+struct EmergencyContactDraft: Equatable {
+    var name: String
+    var phone: String
+    var email: String
+    var relationship: String
+    var priority: Int
+    var emailEnabled: Bool
+    var pushEnabled: Bool
+    var linkedUserEmail: String?
+}
+
+struct EmergencyInvitation: Identifiable, Equatable {
+    let id: String
+    let ownerName: String
+    let ownerEmail: String?
+    let ownerAvatarURL: String?
+    let relationship: String
+    let status: EmergencyContact.InvitationStatus
+    let createdAt: Date?
+}
+
+struct ContactInviteLink: Equatable {
+    let contactId: String
+    let inviteCode: String
+    let inviteURL: String
+    let expiresAt: Date
 }
 
 // MARK: - BLE Hardware Device

@@ -9,7 +9,7 @@ struct CommunityMapView: View {
     @State private var screenIsCaptured = UIScreen.main.isCaptured
 
     init(viewModel: CommunityMapViewModel? = nil) {
-        _viewModel = StateObject(wrappedValue: viewModel ?? CommunityMapViewModel(sosService: AppDIContainer.shared.resolve()))
+        _viewModel = StateObject(wrappedValue: viewModel ?? AppDIContainer.shared.resolve())
     }
 
     var body: some View {
@@ -24,8 +24,21 @@ struct CommunityMapView: View {
                             VStack(spacing: 4) {
                                 ZStack {
                                     Circle().fill(Theme.Colors.redColor.opacity(0.2)).frame(width: 58, height: 58)
-                                    Circle().fill(Theme.Colors.redColor).frame(width: 44, height: 44)
-                                    Text("SOS").font(Theme.Fonts.extraBold.swiftUI(size: 13)).foregroundColor(.white)
+                                    UserAvatarView(
+                                        urlString: alert.senderAvatarURL,
+                                        initials: alert.senderInitials,
+                                        size: 44
+                                    )
+                                    .overlay(Circle().stroke(Theme.Colors.redColor, lineWidth: 3))
+
+                                    Text("SOS")
+                                        .font(Theme.Fonts.extraBold.swiftUI(size: 8))
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 5)
+                                        .padding(.vertical, 2)
+                                        .background(Theme.Colors.redColor)
+                                        .clipShape(Capsule())
+                                        .offset(y: 23)
                                 }
                                 Text(alert.senderName.components(separatedBy: " ").last ?? alert.senderName)
                                     .font(Theme.Fonts.bold.swiftUI(size: 10)).foregroundColor(Theme.Colors.textPrimaryColor)
@@ -50,17 +63,39 @@ struct CommunityMapView: View {
                     }
                 }
             }
-            .onAppear { viewModel.loadAlerts(for: session.currentRole) }
+            .onAppear {
+                session.activatePushNotifications()
+                viewModel.loadAlerts(for: session.currentRole, currentUser: session.currentUser, session: session)
+            }
+            .onDisappear { viewModel.disconnectRealtime() }
             .onReceive(NotificationCenter.default.publisher(for: UIScreen.capturedDidChangeNotification)) { _ in
                 screenIsCaptured = UIScreen.main.isCaptured
                 if screenIsCaptured { viewModel.stopAudio() }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .emergencyRelationshipsDidChange)) { _ in
+                viewModel.clearSelection()
+                showingDetail = false
+                viewModel.stopAudioAndClearCache()
+                viewModel.loadAlerts(for: session.currentRole, currentUser: session.currentUser, session: session)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .sosPushReceived)) { _ in
+                viewModel.reloadFromServer()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .authenticationTokenDidChange)) { _ in
+                viewModel.reconnectRealtime(session: session)
+                viewModel.reloadFromServer()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .appSessionDidInvalidate)) { _ in
+                viewModel.disconnectRealtime()
+                viewModel.stopAudioAndClearCache()
+                showingDetail = false
             }
             .sheet(isPresented: $showingDetail) {
                 if let alert = viewModel.selectedAlert { alertDetail(alert) }
             }
             .confirmationDialog("Kích hoạt SOS?", isPresented: $showingSOSConfirmation, titleVisibility: .visible) {
                 Button("Gửi SOS đến toàn bộ người thân", role: .destructive) {
-                    viewModel.triggerMockSOS()
+                    viewModel.triggerSOS(currentUser: session.currentUser, session: session)
                 }
                 Button("Hủy", role: .cancel) {}
             } message: {
@@ -76,11 +111,11 @@ struct CommunityMapView: View {
                     Circle().fill(Theme.Colors.redColor).frame(width: 10, height: 10)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Đang phát tín hiệu SOS").font(Theme.Fonts.bold.swiftUI(size: 14))
-                        Text("Đã báo cho 3 người thân • \(alert.timeAgoString)")
+                        Text("\(alert.respondersCount) người đã nhận hỗ trợ • \(alert.timeAgoString)")
                             .font(Theme.Fonts.regular.swiftUI(size: 11)).foregroundColor(Theme.Colors.textSecondaryColor)
                     }
                     Spacer()
-                    Button("Đã an toàn") { viewModel.resolveOwnSOS() }
+                    Button("Đã an toàn") { viewModel.resolveOwnSOS(session: session) }
                         .font(Theme.Fonts.bold.swiftUI(size: 12)).foregroundColor(.white)
                         .padding(.horizontal, 12).padding(.vertical, 9).background(Theme.Colors.greenColor).cornerRadius(10)
                 }
@@ -122,12 +157,16 @@ struct CommunityMapView: View {
                     viewModel.selectAlert(alert); showingDetail = true
                 } label: {
                     HStack(spacing: 12) {
-                        Text("SOS").font(Theme.Fonts.extraBold.swiftUI(size: 11)).foregroundColor(.white)
-                            .frame(width: 42, height: 42).background(Theme.Colors.redColor).clipShape(Circle())
+                        UserAvatarView(
+                            urlString: alert.senderAvatarURL,
+                            initials: alert.senderInitials,
+                            size: 42
+                        )
+                        .overlay(Circle().stroke(Theme.Colors.redColor, lineWidth: 2))
                         VStack(alignment: .leading, spacing: 3) {
                             Text(alert.senderName).font(Theme.Fonts.bold.swiftUI(size: 14)).foregroundColor(Theme.Colors.textPrimaryColor)
                             Text(alert.addressName).font(Theme.Fonts.regular.swiftUI(size: 11)).foregroundColor(Theme.Colors.textSecondaryColor).lineLimit(1)
-                            Text("\(alert.respondersCount) người đang đến • \(alert.timeAgoString)")
+                            Text("\(alert.respondersCount) người đã nhận hỗ trợ • \(alert.timeAgoString)")
                                 .font(Theme.Fonts.semiBold.swiftUI(size: 10)).foregroundColor(Theme.Colors.primaryColor)
                         }
                         Spacer()
@@ -144,7 +183,12 @@ struct CommunityMapView: View {
         VStack(spacing: 16) {
             Capsule().fill(Color.gray.opacity(0.25)).frame(width: 42, height: 5).padding(.top, 8)
             HStack(spacing: 12) {
-                Image(systemName: "person.crop.circle.fill").font(.system(size: 48)).foregroundColor(Theme.Colors.primaryColor)
+                UserAvatarView(
+                    urlString: alert.senderAvatarURL,
+                    initials: alert.senderInitials,
+                    size: 52
+                )
+                .overlay(Circle().stroke(Theme.Colors.primaryColor.opacity(0.25), lineWidth: 2))
                 VStack(alignment: .leading, spacing: 3) {
                     Text(alert.senderName).font(Theme.Fonts.bold.swiftUI(size: 18))
                     Text("Đã gửi SOS \(alert.timeAgoString)").font(Theme.Fonts.regular.swiftUI(size: 12)).foregroundColor(Theme.Colors.textSecondaryColor)
@@ -153,7 +197,7 @@ struct CommunityMapView: View {
             }
 
             detailRow(icon: "location.fill", title: "Vị trí hiện tại", value: alert.addressName, color: Theme.Colors.redColor)
-            detailRow(icon: "figure.run", title: "Trạng thái hỗ trợ", value: "Hiện đã có \(alert.respondersCount) người đang trên đường đến", color: Theme.Colors.greenColor)
+            detailRow(icon: "figure.run", title: "Trạng thái hỗ trợ", value: "Hiện có \(alert.respondersCount) người đã nhận hỗ trợ", color: Theme.Colors.greenColor)
 
             if !alert.audioRecords.isEmpty {
                 VStack(alignment: .leading, spacing: 10) {
@@ -162,7 +206,7 @@ struct CommunityMapView: View {
                         HStack {
                             Button {
                                 guard !screenIsCaptured else { return }
-                                viewModel.playEvidenceAudio(record: record)
+                                viewModel.playEvidenceAudio(record: record, session: session)
                             } label: {
                                 Image(systemName: viewModel.activeAudioRecord?.id == record.id && viewModel.isPlayingAudio ? "pause.fill" : "play.fill")
                                     .foregroundColor(.white).frame(width: 36, height: 36)
@@ -183,10 +227,10 @@ struct CommunityMapView: View {
             Spacer()
             if session.currentRole == .trustedContact {
                 HStack(spacing: 10) {
-                    Button("Hỗ trợ từ xa") { viewModel.respondToAlert(isAccepting: false); showingDetail = false }
+                    Button("Hỗ trợ từ xa") { viewModel.respondToAlert(mode: .remote, session: session); showingDetail = false }
                         .font(Theme.Fonts.bold.swiftUI(size: 13)).foregroundColor(Theme.Colors.primaryColor)
                         .frame(maxWidth: .infinity).padding(.vertical, 14).background(Theme.Colors.softPink).cornerRadius(13)
-                    Button("Tôi đang đến") { viewModel.respondToAlert(isAccepting: true); showingDetail = false }
+                    Button("Tôi đang đến") { viewModel.respondToAlert(mode: .inPerson, session: session); showingDetail = false }
                         .font(Theme.Fonts.bold.swiftUI(size: 13)).foregroundColor(.white)
                         .frame(maxWidth: .infinity).padding(.vertical, 14).background(Theme.Colors.primaryColor).cornerRadius(13)
                 }
