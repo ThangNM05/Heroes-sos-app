@@ -63,7 +63,7 @@ struct SOSChatContextView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(member.name)
                             Text(member.role == "owner" ? "Chủ SOS" :
-                                 member.supportMode == .remote ? "Hỗ trợ từ xa" : "Đang đến hỗ trợ")
+                                 member.supportMode == .remote ? "Đã xác nhận hỗ trợ" : "Đang đến hỗ trợ")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
@@ -74,4 +74,3 @@ struct SOSChatContextView: View {
         }
     }
 }
-

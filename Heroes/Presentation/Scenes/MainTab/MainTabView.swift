@@ -3,12 +3,18 @@ import SwiftUI
 struct MainTabView: View {
     @EnvironmentObject private var session: AppSessionStore
     @State private var showingInviteConfirmation = false
+    @State private var isSendingSOS = false
 
     var body: some View {
         Group {
             if session.currentRole == .deviceOwner { ownerTabs } else { trustedContactTabs }
         }
         .tint(Theme.Colors.primaryColor)
+        .onPreferenceChange(AppLoadingPreferenceKey.self) { isSendingSOS = $0 }
+        .disabled(isSendingSOS)
+        .overlay {
+            if isSendingSOS { AppLoadingView(message: "Đang gửi SOS…") }
+        }
         .onAppear {
             showingInviteConfirmation = session.pendingInviteCode != nil
             session.activatePushNotifications()
@@ -27,11 +33,6 @@ struct MainTabView: View {
             if let id = session.pendingSOSChatId {
                 NavigationStack {
                     SOSChatView(chatId: id)
-                        .toolbar {
-                            ToolbarItem(placement: .cancellationAction) {
-                                Button("Đóng") { session.pendingSOSChatId = nil }
-                            }
-                        }
                 }
             }
         }
@@ -39,26 +40,26 @@ struct MainTabView: View {
 
     private var ownerTabs: some View {
         TabView {
-            SOSDashboardView()
+            AppTabNavigationView { SOSDashboardView() }
                 .tabItem { Label("SOS", systemImage: "sos.circle.fill") }
-            CommunityMapView()
+            AppTabNavigationView { CommunityMapView() }
                 .tabItem { Label("Bản đồ", systemImage: "map.fill") }
-            OwnerRecordingsView()
+            AppTabNavigationView { OwnerRecordingsView() }
                 .tabItem { Label("Bản ghi", systemImage: "waveform") }
-            DeviceManagementView()
+            AppTabNavigationView { DeviceManagementView() }
                 .tabItem { Label("Thiết bị", systemImage: "sensor.tag.radiowaves.forward.fill") }
-            SOSSettingsView()
+            AppTabNavigationView { SOSSettingsView() }
                 .tabItem { Label("Cài đặt", systemImage: "gearshape.fill") }
         }
     }
 
     private var trustedContactTabs: some View {
         TabView {
-            CommunityMapView()
+            AppTabNavigationView { CommunityMapView() }
                 .tabItem { Label("Bản đồ", systemImage: "map.fill") }
-            EmergencyNetworkView(mode: .connections)
+            AppTabNavigationView { EmergencyNetworkView(mode: .connections) }
                 .tabItem { Label("Người thân", systemImage: "person.2.fill") }
-            SOSSettingsView()
+            AppTabNavigationView { SOSSettingsView() }
                 .tabItem { Label("Cài đặt", systemImage: "gearshape.fill") }
         }
     }

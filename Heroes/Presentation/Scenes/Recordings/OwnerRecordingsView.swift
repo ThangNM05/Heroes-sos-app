@@ -17,7 +17,7 @@ struct OwnerRecordingsView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        Group {
             ZStack {
                 Color(Theme.Colors.bgColor).ignoresSafeArea()
                 if isLoading && records.isEmpty {

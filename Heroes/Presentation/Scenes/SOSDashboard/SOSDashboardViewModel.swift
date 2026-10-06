@@ -5,6 +5,7 @@ import Foundation
 @MainActor
 final class SOSDashboardViewModel: BaseViewModel, ISOSDashboardViewModel {
     @Published var isEmergencyActive = false
+    @Published private(set) var isSubmittingSOS = false
     @Published var isCountingDown = false
     @Published var countdownRemaining = 3
     @Published var isRecordingAudio = false
@@ -45,9 +46,10 @@ final class SOSDashboardViewModel: BaseViewModel, ISOSDashboardViewModel {
 
     func loadDashboardData(session: AppSessionStore) {
         self.session = session
+        locationProvider.start()
+        guard !isLoading else { return }
         currentSettings = sosService.getSettings()
         connectedDevice = deviceService.getConnectedDevice()
-        locationProvider.start()
         isLoading = true
         Task {
             defer { isLoading = false }
@@ -67,7 +69,7 @@ final class SOSDashboardViewModel: BaseViewModel, ISOSDashboardViewModel {
     }
 
     func onSOSButtonPressed() {
-        guard !isEmergencyActive, !isLoading else { return }
+        guard !isEmergencyActive, !isLoading, !isCountingDown else { return }
         countdownRemaining = currentSettings.countdownDurationSeconds
         isCountingDown = true
         countdownTimer?.cancel()
@@ -90,6 +92,7 @@ final class SOSDashboardViewModel: BaseViewModel, ISOSDashboardViewModel {
     }
 
     func triggerImmediateSOS() {
+        guard !isLoading, !isEmergencyActive else { return }
         cancelCountdownTimerOnly()
         guard let session else {
             errorMessage = AuthValidationError.noActiveSession.localizedDescription
@@ -101,8 +104,9 @@ final class SOSDashboardViewModel: BaseViewModel, ISOSDashboardViewModel {
         }
 
         isLoading = true
+        isSubmittingSOS = true
         Task {
-            defer { isLoading = false }
+            defer { isLoading = false; isSubmittingSOS = false }
             do {
                 let update = SOSLocationUpdate(
                     latitude: location.coordinate.latitude,
@@ -121,6 +125,7 @@ final class SOSDashboardViewModel: BaseViewModel, ISOSDashboardViewModel {
                 }
                 activeSOSAlert = alert
                 isEmergencyActive = true
+                isSubmittingSOS = false
                 if currentSettings.autoRecordAudio { await beginRecording() }
                 if currentSettings.autoTriggerSiren {
                     _ = try await deviceService.toggleSiren(isActive: true)
@@ -138,7 +143,7 @@ final class SOSDashboardViewModel: BaseViewModel, ISOSDashboardViewModel {
     }
 
     func resolveEmergency() {
-        guard let session, let alert = activeSOSAlert else { return }
+        guard !isLoading, let session, let alert = activeSOSAlert else { return }
         isLoading = true
         Task {
             defer { isLoading = false }

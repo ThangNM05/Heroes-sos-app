@@ -23,7 +23,7 @@ struct SOSDashboardView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        Group {
             ZStack {
                 Color(Theme.Colors.bgColor).ignoresSafeArea()
 
@@ -37,6 +37,7 @@ struct SOSDashboardView: View {
                             activeEmergencyBanner
                             if let chatId = viewModel.activeSOSAlert?.chatId {
                                 Button("Mở nhóm hỗ trợ SOS") { session.openSOSChat(chatId) }
+                                    .font(Theme.Fonts.semiBold.swiftUI(size: 14))
                                     .buttonStyle(.borderedProminent)
                             }
                         }
@@ -74,7 +75,7 @@ struct SOSDashboardView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    NavigationLink { SOSChatListView() } label: {
+                    NavigationLink(value: AppRoute.sosChats) {
                         Image(systemName: "bubble.left.and.bubble.right")
                     }.accessibilityLabel("Nhóm hỗ trợ SOS")
                 }
@@ -93,6 +94,8 @@ struct SOSDashboardView: View {
                 Text(viewModel.errorMessage ?? "Đã xảy ra lỗi.")
             }
         }
+        .disabled(viewModel.isLoading)
+        .preference(key: AppLoadingPreferenceKey.self, value: viewModel.isSubmittingSOS)
     }
 
     // MARK: - Subviews
@@ -138,7 +141,7 @@ struct SOSDashboardView: View {
 
             Spacer()
 
-            NavigationLink(destination: DeviceManagementView()) {
+            NavigationLink(value: AppRoute.devices) {
                 Image(systemName: "chevron.right")
                     .foregroundColor(Theme.Colors.textSecondaryColor)
                     .padding(8)
@@ -239,7 +242,7 @@ struct SOSDashboardView: View {
 
             Spacer()
 
-            NavigationLink(destination: SOSSettingsView()) {
+            NavigationLink(value: AppRoute.settings) {
                 Text("Đổi")
                     .font(Theme.Fonts.semiBold.swiftUI(size: 13))
                     .foregroundColor(Theme.Colors.primaryColor)

@@ -8,11 +8,14 @@
 
 import Foundation
 
+@MainActor
 protocol ISOSChatService {
+    func cachedList(status: SOSChatStatus, session: AppSessionStore) -> SOSChatListPage?
+    func preload(session: AppSessionStore) async
+    func invalidateCache()
     func list(status: SOSChatStatus, before: String?, session: AppSessionStore) async throws -> SOSChatListPage
     func detail(id: String, session: AppSessionStore) async throws -> SOSChatDetail
     func messages(id: String, before: Int?, after: Int?, session: AppSessionStore) async throws -> SOSChatMessagePage
     func send(id: String, request: SOSChatMessageRequest, session: AppSessionStore) async throws -> SOSChatMessage
     func acknowledge(id: String, mode: SOSSupportMode, session: AppSessionStore) async throws
 }
-

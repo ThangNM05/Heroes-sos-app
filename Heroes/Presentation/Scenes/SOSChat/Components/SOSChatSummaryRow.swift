@@ -10,6 +10,7 @@ import SwiftUI
 
 struct SOSChatSummaryRow: View {
     let chat: SOSChatSummary
+    var hasMessages: Bool?
 
     var body: some View {
         HStack(spacing: 12) {
@@ -20,8 +21,15 @@ struct SOSChatSummaryRow: View {
                     .font(.caption).foregroundStyle(.secondary)
                 Text(chat.createdAt, format: .dateTime.day().month().hour().minute())
                     .font(.caption2).foregroundStyle(.secondary)
+                if chat.status == .closed {
+                    Label(hasMessages.map { $0 ? "Có tin nhắn còn lưu" : "Không có tin nhắn còn lưu" } ?? "Chưa xác định lịch sử tin nhắn",
+                          systemImage: hasMessages == true ? "bubble.left.and.bubble.right.fill" : "bubble.left")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(hasMessages == true ? Theme.Colors.primaryColor : Color.secondary)
+                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .background(Theme.Colors.softPink, in: Capsule())
+                }
             }
         }.padding(.vertical, 4)
     }
 }
-

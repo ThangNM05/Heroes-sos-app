@@ -11,16 +11,16 @@ struct SOSSettingsView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        Group {
             List {
                 profileSection
 
                 if session.currentRole == .deviceOwner {
                     Section("An toàn") {
-                        NavigationLink { EmergencyNetworkView(mode: .manage) } label: {
+                        NavigationLink(value: AppRoute.emergencyNetwork) {
                             settingsRow(icon: "person.3.fill", title: "Mạng lưới khẩn cấp", subtitle: "\(viewModel.emergencyContacts.count)/10 người", color: Theme.Colors.primaryColor)
                         }
-                        NavigationLink { OwnerRecordingsView() } label: {
+                        NavigationLink(value: AppRoute.recordings) {
                             settingsRow(icon: "waveform", title: "Quyền riêng tư bản ghi", subtitle: "Lưu tối đa 30 ngày", color: Theme.Colors.amberColor)
                         }
                     }
@@ -74,12 +74,10 @@ struct SOSSettingsView: View {
 
     private var profileSection: some View {
         Section {
-            NavigationLink { SOSChatListView() } label: {
+            NavigationLink(value: AppRoute.sosChats) {
                 Label("Nhóm hỗ trợ SOS", systemImage: "bubble.left.and.bubble.right")
             }
-            NavigationLink {
-                UserProfileView()
-            } label: {
+            NavigationLink(value: AppRoute.profile) {
                 HStack(spacing: 14) {
                     UserAvatarView(
                         urlString: session.currentUser?.avatarURL,
