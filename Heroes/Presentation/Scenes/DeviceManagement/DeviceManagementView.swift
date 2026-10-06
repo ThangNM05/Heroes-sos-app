@@ -10,7 +10,7 @@ struct DeviceManagementView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        Group {
             ZStack {
                 Color(Theme.Colors.bgColor).ignoresSafeArea()
                 ScrollView {

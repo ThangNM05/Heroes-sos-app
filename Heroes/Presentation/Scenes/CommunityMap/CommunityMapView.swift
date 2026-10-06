@@ -13,7 +13,7 @@ struct CommunityMapView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        Group {
             ZStack(alignment: .bottom) {
                 Map(coordinateRegion: $viewModel.region, annotationItems: viewModel.alerts) { alert in
                     MapAnnotation(coordinate: alert.coordinate) {
@@ -57,7 +57,7 @@ struct CommunityMapView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    NavigationLink { SOSChatListView() } label: {
+                    NavigationLink(value: AppRoute.sosChats) {
                         Image(systemName: "bubble.left.and.bubble.right")
                     }.accessibilityLabel("Nhóm hỗ trợ SOS")
                 }
@@ -237,10 +237,10 @@ struct CommunityMapView: View {
                 }.buttonStyle(.borderedProminent)
             } else if session.currentRole == .trustedContact {
                 HStack(spacing: 10) {
-                    Button("Hỗ trợ từ xa") { viewModel.respondToAlert(mode: .remote, session: session); showingDetail = false }
+                    Button("Tôi không thể hỗ trợ") { showingDetail = false }
                         .font(Theme.Fonts.bold.swiftUI(size: 13)).foregroundColor(Theme.Colors.primaryColor)
                         .frame(maxWidth: .infinity).padding(.vertical, 14).background(Theme.Colors.softPink).cornerRadius(13)
-                    Button("Tôi đang đến") { viewModel.respondToAlert(mode: .inPerson, session: session); showingDetail = false }
+                    Button("Tôi có thể hỗ trợ") { viewModel.respondToAlert(mode: .remote, session: session); showingDetail = false }
                         .font(Theme.Fonts.bold.swiftUI(size: 13)).foregroundColor(.white)
                         .frame(maxWidth: .infinity).padding(.vertical, 14).background(Theme.Colors.primaryColor).cornerRadius(13)
                 }

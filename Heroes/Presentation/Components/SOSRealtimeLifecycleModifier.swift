@@ -14,22 +14,41 @@ struct SOSRealtimeLifecycleModifier: ViewModifier {
     @EnvironmentObject private var session: AppSessionStore
     @Environment(\.scenePhase) private var scenePhase
     private let realtime: ISOSRealtimeClient = AppDIContainer.shared.resolve()
+    private let chatService: ISOSChatService = AppDIContainer.shared.resolve()
     @ObservedObject private var pushRouter = SOSChatPushRouter.shared
 
     func body(content: Content) -> some View {
         content
+            .task(id: session.currentUser?.id) {
+                await chatService.preload(session: session)
+            }
+            .onReceive(realtime.events) { event in
+                switch event {
+                case .location, .recording: break
+                default:
+                    chatService.invalidateCache()
+                    if event == .ready { Task { await chatService.preload(session: session) } }
+                }
+            }
             .onAppear { connect() }
             .onChange(of: session.activeAccessToken) { _, _ in connect() }
             .onReceive(NotificationCenter.default.publisher(for: .authenticationTokenDidChange)) { _ in connect() }
             .onChange(of: scenePhase) { _, phase in
-                if phase == .active { connect() }
+                if phase == .active {
+                    connect()
+                    Task { await chatService.preload(session: session) }
+                }
                 else if phase == .background { realtime.disconnect() }
             }
             .onReceive(NotificationCenter.default.publisher(for: .appSessionDidInvalidate)) { _ in
                 realtime.disconnect()
+                chatService.invalidateCache()
                 pushRouter.pendingChatId = nil
             }
             .onReceive(pushRouter.$pendingChatId) { _ in routePush() }
+            .onReceive(NotificationCenter.default.publisher(for: .emergencyRelationshipsDidChange)) { _ in
+                chatService.invalidateCache()
+            }
     }
 
     private func connect() {

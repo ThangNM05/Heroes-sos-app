@@ -130,7 +130,7 @@ final class CommunityMapViewModel: BaseViewModel, ICommunityMapViewModel {
     }
 
     func respondToAlert(mode: SOSSupportMode, session: AppSessionStore) {
-        guard let alert = selectedAlert else { return }
+        guard !isLoading, let alert = selectedAlert else { return }
         isLoading = true
         Task {
             defer { isLoading = false }

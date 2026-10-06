@@ -23,22 +23,24 @@ struct SOSChatView: View {
     }
 
     var body: some View {
-        Group {
-            if viewModel.accessRevoked {
-                ContentUnavailableView("Nhóm không còn khả dụng", systemImage: "lock",
-                                       description: Text("Phiên hỗ trợ đã kết thúc hoặc quyền truy cập đã thay đổi."))
-            } else if viewModel.acknowledgementRequired {
-                VStack(spacing: 18) {
-                    ContentUnavailableView("Xác nhận hỗ trợ", systemImage: "person.2",
-                                           description: Text("Bạn cần xác nhận hỗ trợ trước khi vào nhóm."))
-                    Button("Tôi sẵn sàng hỗ trợ") { showAcknowledge = true }.buttonStyle(.borderedProminent)
+        VStack(spacing: 0) {
+            SOSChatHeader(title: viewModel.detail?.summary.title ?? "Nhóm hỗ trợ SOS") { dismiss() }
+            Group {
+                if viewModel.accessRevoked {
+                    ContentUnavailableView("Nhóm không còn khả dụng", systemImage: "lock",
+                                           description: Text("Phiên hỗ trợ đã kết thúc hoặc quyền truy cập đã thay đổi."))
+                } else if viewModel.acknowledgementRequired {
+                    VStack(spacing: 18) {
+                        ContentUnavailableView("Xác nhận hỗ trợ", systemImage: "person.2",
+                                               description: Text("Bạn cần xác nhận hỗ trợ trước khi vào nhóm."))
+                        Button("Tôi có thể hỗ trợ") { showAcknowledge = true }.buttonStyle(.borderedProminent)
+                    }
+                } else {
+                    conversation
                 }
-            } else {
-                conversation
             }
         }
-        .navigationTitle(viewModel.detail?.summary.title ?? "Nhóm hỗ trợ SOS")
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
         .task { viewModel.start(session: session) }
         .onDisappear { viewModel.stop() }
         .onChange(of: scenePhase) { _, phase in
@@ -53,10 +55,9 @@ struct SOSChatView: View {
         .onReceive(NotificationCenter.default.publisher(for: UIScreen.capturedDidChangeNotification)) { _ in
             if UIScreen.main.isCaptured { viewModel.audioPlayer.clearAndStop() }
         }
-        .confirmationDialog("Bạn hỗ trợ bằng cách nào?", isPresented: $showAcknowledge) {
-            ForEach(SOSSupportMode.allCases) { mode in
-                Button(mode.title) { acknowledge(mode) }
-            }
+        .confirmationDialog("Bạn có thể hỗ trợ không?", isPresented: $showAcknowledge) {
+            Button("Tôi có thể hỗ trợ") { acknowledge(.remote) }
+            Button("Tôi không thể hỗ trợ", role: .cancel) { dismiss() }
         }
     }
 

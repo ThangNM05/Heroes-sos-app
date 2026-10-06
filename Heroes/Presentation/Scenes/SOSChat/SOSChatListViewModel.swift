@@ -14,6 +14,7 @@ final class SOSChatListViewModel: BaseViewModel {
     @Published private(set) var items: [SOSChatSummary] = []
     @Published var status: SOSChatStatus = .active
     @Published private(set) var hasMore = false
+    @Published private(set) var messagePresence: [String: Bool] = [:]
     private let service: ISOSChatService
     private var nextCursor: String?
     private var generation = UUID()
@@ -23,15 +24,24 @@ final class SOSChatListViewModel: BaseViewModel {
     init(service: ISOSChatService, realtime: ISOSRealtimeClient) {
         self.service = service
         super.init()
-        subscription = realtime.events.sink { [weak self] _ in
+        subscription = realtime.events.sink { [weak self] event in
+            switch event {
+            case .location, .recording: return
+            default: break
+            }
             guard let self, let session = self.session else { return }
-            Task { await self.load(session: session) }
+            Task { await self.load(session: session, forceRefresh: true) }
         }
     }
 
-    func load(session: AppSessionStore, reset: Bool = true) async {
+    func load(session: AppSessionStore, reset: Bool = true, forceRefresh: Bool = false) async {
         self.session = session
         guard !isLoading else { return }
+        if forceRefresh { service.invalidateCache() }
+        if reset, items.isEmpty, let cached = service.cachedList(status: status, session: session) {
+            items = cached.items
+            hasMore = cached.nextCursor != nil
+        }
         let epoch = generation
         isLoading = true
         defer { if epoch == generation { isLoading = false } }
@@ -54,6 +64,7 @@ final class SOSChatListViewModel: BaseViewModel {
             nextCursor = cursor
             hasMore = cursor != nil
             errorMessage = nil
+            await loadMessagePresence(session: session, epoch: epoch)
         } catch {
             guard epoch == generation else { return }
             handleError(error)
@@ -61,9 +72,32 @@ final class SOSChatListViewModel: BaseViewModel {
         }
     }
 
+    private func loadMessagePresence(session: AppSessionStore, epoch: UUID) async {
+        let closed = items.filter { $0.status == .closed }
+        for chat in closed where chat.lastMessageSequence == 0 { messagePresence[chat.id] = false }
+        let candidates = closed.filter { $0.lastMessageSequence > 0 }
+        // Bound parallelism so a long archive cannot flood the API.
+        for start in stride(from: 0, to: candidates.count, by: 3) {
+            guard epoch == generation, session.isAuthenticated else { return }
+            await withTaskGroup(of: (String, Bool?).self) { group in
+                for chat in candidates[start..<min(start + 3, candidates.count)] {
+                    group.addTask { @MainActor in
+                        let page = try? await self.service.messages(id: chat.id, before: nil, after: nil, session: session)
+                        return (chat.id, page.map { $0.items.contains { $0.expiresAt > Date() } })
+                    }
+                }
+                for await (id, presence) in group {
+                    guard epoch == generation else { continue }
+                    messagePresence[id] = presence
+                }
+            }
+        }
+    }
+
     func clear() {
         generation = UUID()
         items = []
+        messagePresence = [:]
         nextCursor = nil
         hasMore = false
         isLoading = false

@@ -32,8 +32,8 @@ struct BaseProjectApp: App {
     var body: some Scene {
         WindowGroup {
             SplashView()
-                .environmentObject(session)
                 .modifier(SOSRealtimeLifecycleModifier())
+                .environmentObject(session)
                 .preferredColorScheme(.light)
                 .onOpenURL { session.handleInvitationURL($0) }
                 .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
